@@ -31,13 +31,6 @@ SKILL_AGENTS: dict[str, list[str]] = {
     "pr-review": [],
 }
 
-OBSOLETE_AGENTS = [
-    "plan-develop-planner.md",
-    "plan-develop-validator.md",
-    "plan-develop-developer.md",
-    "plan-develop-reviewer.md",
-]
-
 
 def load_config(path: Path) -> dict:
     with path.open() as f:
@@ -111,15 +104,6 @@ def copy_agents(
         shutil.copy2(src, dest)
 
 
-def remove_obsolete(dest_agents: Path, dry_run: bool) -> None:
-    for name in OBSOLETE_AGENTS:
-        path = dest_agents / name
-        if path.is_file():
-            print(f"  remove obsolete {path}")
-            if not dry_run:
-                path.unlink()
-
-
 def install_provider(
     provider: str,
     config: dict,
@@ -157,7 +141,6 @@ def install_provider(
             unique_agents.append(name)
 
     copy_agents(provider, unique_agents, agents_dir, dry_run)
-    remove_obsolete(agents_dir, dry_run)
 
     if "plan-develop" in skills:
         missing = [s for s in ("plan-review", "develop-review") if s not in skills]

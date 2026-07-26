@@ -31,11 +31,7 @@ python scripts/install.py --provider all --skill pr-review --dry-run
 python scripts/install.py --provider claude --project
 ```
 
-The script copies each skill directory and any agents that skill owns, and removes
-obsolete `plan-develop-{planner,validator,developer,reviewer}.md` agents if present.
-
-Also check any repo that still has those obsolete agents under
-`<repo>/.claude/agents/` or `<repo>/.codex/agents/`.
+The script copies each skill directory and any agents that skill owns.
 
 ## Layout
 
