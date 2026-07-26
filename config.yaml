@@ -1,0 +1,28 @@
+# Default models and per-provider settings for skill generation.
+# CLI flags (--planning-model, --development-model, --review-model) override these.
+
+defaults:
+  planning_model: claude-sonnet-5
+  development_model: claude-sonnet-5
+  review_model: claude-opus-5
+
+providers:
+  claude:
+    skills_dir: "~/.claude/skills"
+    agents_dir: "~/.claude/agents"
+    project_agents_dir: ".claude/agents"
+    compatibility: "Claude Code or Cowork (needs Task-tool subagents to run separate generative/adversarial context windows)"
+    # {name} is replaced with the agent/subagent id when rendering
+    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}`"
+    environment_name: "Claude Code or Cowork"
+
+  codex:
+    planning_model: gpt-5
+    development_model: gpt-5
+    review_model: o3
+    skills_dir: "~/.codex/skills"
+    agents_dir: "~/.codex/agents"
+    project_agents_dir: ".codex/agents"
+    compatibility: "Codex (needs subagent support to run separate generative/adversarial context windows)"
+    subagent_invoke: "Spawn a subagent named `{name}` in a fresh context"
+    environment_name: "Codex"
