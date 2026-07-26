@@ -1,13 +1,13 @@
 ---
 name: develop-review
-description: Implements a coding task and loops a GPT-5 developer against a o3 reviewer — reviewing the real diff, not the developer's summary — applying targeted fixes until the reviewer signs off, then opens a pull request. Use this whenever the user wants something built, implemented, or fixed with real cross-model code review before it's considered done, wants a second model to review a diff or catch what the first one missed, mentions "develop-review", or hands over an already-approved plan to be built. Also use it as the implementation half of the plan-develop pipeline. Requires an environment with subagents (Codex), a git repo, and the gh CLI.
+description: Implements a coding task and loops a GPT 5.6 Terra developer against a GPT 5.6 Sol reviewer — reviewing the real diff, not the developer's summary — applying targeted fixes until the reviewer signs off, then opens a pull request. Use this whenever the user wants something built, implemented, or fixed with real cross-model code review before it's considered done, wants a second model to review a diff or catch what the first one missed, mentions "develop-review", or hands over an already-approved plan to be built. Also use it as the implementation half of the plan-develop pipeline. Requires an environment with subagents (Codex), a git repo, and the gh CLI.
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), a git repository so the reviewer can read the real diff, and the gh CLI authenticated for opening pull requests.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Develop-Review
 
 A bounded two-model loop that turns an approved plan (or a well-scoped task) into reviewed
-code: **develop (GPT-5) → review (o3) → fix → …** until the reviewer approves or the
+code: **develop (GPT 5.6 Terra) → review (GPT 5.6 Sol) → fix → …** until the reviewer approves or the
 cap is hit.
 
 ## Why this shape
@@ -36,14 +36,14 @@ Check before starting, and say plainly if something is missing rather than half-
   the full develop/review loop — just hand back a pushed branch at the end instead of
   opening a PR, and say so up front rather than at the end.
 - An environment with subagents. **In a plain chat interface with no subagent
-  capability you cannot get a genuinely independent o3 review** — say so, and offer to
+  capability you cannot get a genuinely independent GPT 5.6 Sol review** — say so, and offer to
   run the two stages sequentially yourself, switching hats explicitly, as a weaker
   substitute.
 
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: gpt-5` or `model: o3`) so the right model runs
+frontmatter (`model: gpt-5.6-Terra` or `model: gpt-5.6-Sol`) so the right model runs
 regardless of what the main session is using.
 
 Check whether `develop-review-developer` and `develop-review-reviewer` are already
@@ -55,8 +55,8 @@ available. If not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `develop-review-developer.md` — GPT-5, writes the code and applies fixes.
-- `develop-review-reviewer.md` — o3, reviews the diff.
+- `develop-review-developer.md` — GPT 5.6 Terra, writes the code and applies fixes.
+- `develop-review-reviewer.md` — GPT 5.6 Sol, reviews the diff.
 
 ## Step 0: Establish what's being built
 
@@ -70,14 +70,14 @@ You need something concrete enough to implement against. That's either:
 
 Confirm which branch the work belongs on before any code is written.
 
-## Step 1: Develop (GPT-5)
+## Step 1: Develop (GPT 5.6 Terra)
 
 Spawn a subagent named `develop-review-developer` in a fresh context in **build mode**.
 Give it the plan or task, plus any constraints the user stated. It writes the code,
 follows existing conventions in the repo, runs whatever tests and linters already exist,
 and reports what it changed file by file and what it ran.
 
-## Step 2: Review (o3)
+## Step 2: Review (GPT 5.6 Sol)
 
 Spawn a subagent named `develop-review-reviewer` in a fresh context with:
 

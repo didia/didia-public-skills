@@ -2,7 +2,7 @@
 name: plan-review-validator
 description: Independently critiques, tightens, and approves an implementation plan before any code is written. The adversarial half of the plan-review loop (also used by plan-develop).
 tools: Read, Grep, Glob, Bash
-model: o3
+model: gpt-5.6-Sol
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 You are the validation stage of a plan → validate loop. A plan for a coding task has been

@@ -1,13 +1,13 @@
 ---
 name: plan-review
-description: Produces a battle-tested implementation plan for a coding task by looping a GPT-5 planner against a o3 validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Codex).
+description: Produces a battle-tested implementation plan for a coding task by looping a GPT 5.6 Terra planner against a GPT 5.6 Sol validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Codex).
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows). Read-only on the repo — this skill never writes code.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Plan-Review
 
 A bounded two-model loop that turns a coding task into an approved implementation plan:
-**plan (GPT-5) → validate (o3) → revise → …** until the validator approves or the
+**plan (GPT 5.6 Terra) → validate (GPT 5.6 Sol) → revise → …** until the validator approves or the
 cap is hit.
 
 ## Why this shape
@@ -28,7 +28,7 @@ separate concern — see `develop-review`, or `plan-develop` for both halves end
 Check before starting, and say plainly if something is missing rather than half-running it:
 
 - An environment with subagents. **In a plain chat interface with no subagent
-  capability you cannot get a genuinely independent o3 pass** — say so, and offer to run
+  capability you cannot get a genuinely independent GPT 5.6 Sol pass** — say so, and offer to run
   the two stages sequentially yourself, switching hats explicitly, as a weaker substitute.
 - A repository to ground the plan in. A plan written without reading the actual codebase
   is a guess; both subagents have read-only tools specifically so they can check.
@@ -36,7 +36,7 @@ Check before starting, and say plainly if something is missing rather than half-
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: gpt-5` or `model: o3`) so the right model runs
+frontmatter (`model: gpt-5.6-Terra` or `model: gpt-5.6-Sol`) so the right model runs
 regardless of what the main session is using.
 
 Check whether `plan-review-planner` and `plan-review-validator` are already available. If
@@ -48,8 +48,8 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — GPT-5, drafts and revises the plan.
-- `plan-review-validator.md` — o3, critiques and tightens it.
+- `plan-review-planner.md` — GPT 5.6 Terra, drafts and revises the plan.
+- `plan-review-validator.md` — GPT 5.6 Sol, critiques and tightens it.
 
 ## Step 0: Pin down the task
 
@@ -61,7 +61,7 @@ planner guess and the validator catch the guess three minutes later.
 Note any constraints the user gave (framework, deadline, "don't touch the auth layer") —
 these travel with the task into every subagent call, or they get silently dropped.
 
-## Step 1: Plan (GPT-5)
+## Step 1: Plan (GPT 5.6 Terra)
 
 Spawn a subagent named `plan-review-planner` in a fresh context. Give it:
 
@@ -73,7 +73,7 @@ Spawn a subagent named `plan-review-planner` in a fresh context. Give it:
 Ask for a plan, not code. The planner returns Approach / Files to touch / Edge cases &
 risks / Test plan.
 
-## Step 2: Validate (o3)
+## Step 2: Validate (GPT 5.6 Sol)
 
 Spawn a subagent named `plan-review-validator` in a fresh context with the task and **the plan text itself** —
 not the planner's reasoning transcript, not your summary of it. The whole point is a

@@ -17,9 +17,9 @@ providers:
     environment_name: "Claude Code or Cowork"
 
   codex:
-    planning_model: gpt-5
-    development_model: gpt-5
-    review_model: o3
+    planning_model: gpt-5.6-Terra
+    development_model: gpt-5.6-Terra
+    review_model: gpt-5.6-Sol
     skills_dir: "~/.codex/skills"
     agents_dir: "~/.codex/agents"
     project_agents_dir: ".codex/agents"

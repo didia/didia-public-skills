@@ -2,7 +2,7 @@
 name: develop-review-developer
 description: Implements an approved plan, or applies targeted fixes from a review. The generative half of the develop-review loop (also used by plan-develop).
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: gpt-5
+model: gpt-5.6-Terra
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 You are the development stage of a develop → review loop. You're invoked in one of two
