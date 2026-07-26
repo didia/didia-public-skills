@@ -2,7 +2,7 @@
 name: plan-review-planner
 description: Drafts and revises an implementation plan for a coding task, without writing code. The generative half of the plan-review loop (also used by plan-develop).
 tools: Read, Grep, Glob, Bash
-model: claude-sonnet-5
+model: claude-opus-5
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 You are the planning stage of a plan → validate loop. Your only job is to produce a clear,

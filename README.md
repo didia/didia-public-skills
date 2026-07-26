@@ -43,7 +43,17 @@ Optional label overrides per provider: `planning_model_label`, `development_mode
 
 ## Install
 
-See [INSTALL.md](INSTALL.md).
+```bash
+# both providers, all skills (paths from config.yaml)
+python scripts/install.py
+
+# one provider / specific skill(s)
+python scripts/install.py --provider claude
+python scripts/install.py --provider codex --skill plan-review
+python scripts/install.py --provider claude plan-review develop-review
+```
+
+See [INSTALL.md](INSTALL.md) for `--project`, `--dry-run`, and generate steps.
 
 ## Layout
 

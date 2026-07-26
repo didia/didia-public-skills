@@ -1,13 +1,13 @@
 ---
 name: plan-review
-description: Produces a battle-tested implementation plan for a coding task by looping a Sonnet 5 planner against a Opus 5 validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Claude Code or Cowork).
+description: Produces a battle-tested implementation plan for a coding task by looping a Opus 5 planner against a Opus 5 validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Claude Code or Cowork).
 compatibility: Claude Code or Cowork (needs Task-tool subagents to run separate generative/adversarial context windows). Read-only on the repo — this skill never writes code.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Plan-Review
 
 A bounded two-model loop that turns a coding task into an approved implementation plan:
-**plan (Sonnet 5) → validate (Opus 5) → revise → …** until the validator approves or the
+**plan (Opus 5) → validate (Opus 5) → revise → …** until the validator approves or the
 cap is hit.
 
 ## Why this shape
@@ -36,7 +36,7 @@ Check before starting, and say plainly if something is missing rather than half-
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: claude-sonnet-5` or `model: claude-opus-5`) so the right model runs
+frontmatter (`model: claude-opus-5` or `model: claude-opus-5`) so the right model runs
 regardless of what the main session is using.
 
 Check whether `plan-review-planner` and `plan-review-validator` are already available. If
@@ -48,7 +48,7 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — Sonnet 5, drafts and revises the plan.
+- `plan-review-planner.md` — Opus 5, drafts and revises the plan.
 - `plan-review-validator.md` — Opus 5, critiques and tightens it.
 
 ## Step 0: Pin down the task
@@ -61,7 +61,7 @@ planner guess and the validator catch the guess three minutes later.
 Note any constraints the user gave (framework, deadline, "don't touch the auth layer") —
 these travel with the task into every subagent call, or they get silently dropped.
 
-## Step 1: Plan (Sonnet 5)
+## Step 1: Plan (Opus 5)
 
 Invoke the Task tool with `subagent_type: plan-review-planner`. Give it:
 
