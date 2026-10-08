@@ -31,6 +31,14 @@ AGENT_SKILL_MAP = {
     "develop-review-reviewer.md": "develop-review",
 }
 
+# Shared reference files copied into skill references/ directories
+SHARED_REFERENCES = {
+    "harness-stack-protocol.md": (
+        "stack-develop",
+        "stack-review",
+    ),
+}
+
 KNOWN_LABELS = {
     "claude-sonnet-5": "Sonnet 5",
     "claude-opus-5": "Opus 5",
@@ -185,6 +193,17 @@ def render_tree(provider: str, ctx: dict, env: Environment) -> None:
         if skill:
             bundled = out_root / "skills" / skill / "agents" / basename
             write_text(bundled, rendered, stamp=True)
+
+    # Shared references: same protocol file into each owning skill
+    shared_src = TEMPLATES / "shared"
+    for filename, skills in SHARED_REFERENCES.items():
+        src = shared_src / filename
+        if not src.is_file():
+            raise SystemExit(f"Missing shared reference: {src}")
+        for skill in skills:
+            dest = out_root / "skills" / skill / "references" / "protocol.md"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
 
     print(f"Generated {provider}/")
 

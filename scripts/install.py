@@ -29,6 +29,15 @@ SKILL_AGENTS: dict[str, list[str]] = {
     ],
     "plan-develop": [],
     "pr-review": [],
+    "stack-develop": [],
+    "stack-review": [],
+}
+
+# Skills that need sibling skills installed on the same harness
+SKILL_DEPS: dict[str, list[str]] = {
+    "plan-develop": ["plan-review", "develop-review"],
+    "stack-develop": ["develop-review"],
+    "stack-review": ["pr-review"],
 }
 
 
@@ -142,14 +151,16 @@ def install_provider(
 
     copy_agents(provider, unique_agents, agents_dir, dry_run)
 
-    if "plan-develop" in skills:
-        missing = [s for s in ("plan-review", "develop-review") if s not in skills]
-        # Only warn when doing a partial install that omitted the deps
-        all_available = set(available_skills(provider))
-        if missing and set(skills) != all_available:
-            print(
-                f"  note: plan-develop needs {', '.join(missing)} installed as well"
-            )
+    all_available = set(available_skills(provider))
+    # Warn on partial installs that omit sibling deps
+    if set(skills) != all_available:
+        for skill in skills:
+            deps = SKILL_DEPS.get(skill, [])
+            missing = [d for d in deps if d not in skills]
+            if missing:
+                print(
+                    f"  note: {skill} needs {', '.join(missing)} installed as well"
+                )
 
 
 def parse_args() -> argparse.Namespace:

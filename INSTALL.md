@@ -40,6 +40,8 @@ claude/skills/plan-review/      planning loop
 claude/skills/develop-review/   implementation loop → PR
 claude/skills/plan-develop/     orchestrator
 claude/skills/pr-review/        deep GitHub PR review
+claude/skills/stack-develop/    cross-harness stack developer (needs develop-review)
+claude/skills/stack-review/     cross-harness stack reviewer (needs pr-review)
 claude/agents/                  four subagents (user-wide install)
 
 codex/…                         same skills/agents, Codex models + paths
@@ -47,6 +49,11 @@ codex/…                         same skills/agents, Codex models + paths
 
 Each loop skill also keeps a copy of its agents under its `agents/` directory so the
 skill stays self-contained in a project install.
+
+`stack-develop` and `stack-review` coordinate only through GitHub labels and PR
+markers. Install `stack-develop` with `develop-review` on the developer harness,
+and `stack-review` with `pr-review` on the reviewer harness (they may be
+different providers).
 
 Default models come from `config.yaml`. Change them there or pass
 `--planning-model` / `--development-model` / `--review-model` when generating.

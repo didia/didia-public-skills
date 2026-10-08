@@ -10,6 +10,8 @@ Workflows:
 | `develop-review` | Bounded develop → review loop, then open a PR |
 | `plan-develop` | Orchestrator: branch → plan-review → develop-review → PR |
 | `pr-review` | Deep GitHub PR review with inline comments |
+| `stack-develop` | Cross-harness developer: stack PRs via develop-review, merge, sync |
+| `stack-review` | Cross-harness reviewer: eligible stack bottom via pr-review |
 
 Templates live under `templates/`. Generated trees are committed at `claude/` and `codex/`. **Edit templates and `config.yaml`, not the generated files.**
 
