@@ -34,8 +34,9 @@ asks for. You do **not** edit code or merge.
 
 ## Main loop
 
-Fetch open stack PRs (labels, body, `baseRefName`, `headRefOid`, `mergeable`,
-reviews, comments) and run:
+Fetch the stack, including merged and closed parents, with review `author` and
+`state` and comment authors. Pass the same `trusted_reviewers` and
+`trusted_developers` logins the developer harness uses, and run:
 
 ```bash
 python3 scripts/stack_state.py review payload.json
@@ -64,9 +65,9 @@ When a PR is eligible:
    `changes-requested`; otherwise `approved`.
 5. After that one review is posted, remove `harness:awaiting-review` from the
    PR (leave other labels alone; the developer will re-label as needed).
-6. Stop for that PR until a new head appears with a matching `harness-fix`
-   and the developer sets `harness:awaiting-review` again — and only if
-   rounds remain.
+6. After `changes-requested`, the script will not ask for another round until
+   a trusted `harness-fix` names the live head. A sync push alone does not
+   start one. Sign the review with your trusted login.
 
 Default `max-rounds` is 2, so a `changes-requested` review gets a second pass
 after the fix. `approved` stops early. The developer may merge once the cap is

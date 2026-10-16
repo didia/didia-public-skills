@@ -69,6 +69,16 @@ class GenerateTests(unittest.TestCase):
                 {"review_model": "sonnet", "planning_model": "opus"},
             )
 
+    def test_validator_model_checked_apart_from_matrix(self):
+        config = generate.load_config(ROOT / "config.yaml")
+        claude = config["providers"]["claude"]
+        claude["review_model"] = "sonnet"
+        claude["review_by_complexity"] = {
+            level: {"model": "opus"} for level in generate.COMPLEXITY_LEVELS
+        }
+        with self.assertRaises(SystemExit):
+            generate.merge_provider_context(config, "claude", {})
+
     def test_codex_agent_toml(self):
         md = (
             "---\n"
@@ -84,6 +94,9 @@ class GenerateTests(unittest.TestCase):
         self.assertIn('model_reasoning_effort = "high"', toml)
         self.assertIn("developer_instructions", toml)
         self.assertIn("Do the work.", toml)
+        dynamic = generate.markdown_agent_to_toml(md, include_model=False)
+        self.assertNotIn("model =", dynamic)
+        self.assertNotIn("model_reasoning_effort", dynamic)
 
 
 if __name__ == "__main__":

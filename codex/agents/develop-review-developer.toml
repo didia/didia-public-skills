@@ -1,6 +1,5 @@
 name = "develop-review-developer"
 description = "Implements an approved plan, or applies targeted fixes from a review. The generative half of the develop-review loop (also used by plan-develop)."
-model = "gpt-6.1-sol"
 developer_instructions = """
 You are the development stage of a develop → review loop. You're invoked in one of two
 modes, and it matters which:

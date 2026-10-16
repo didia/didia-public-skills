@@ -31,6 +31,9 @@ Check up front and say what is missing:
 - **Trunk** — base of stack index 1 (`main`, `dev`, or whatever the user
   confirms). Default for a from-scratch stack in this repo's generator is
   `dev` when the user does not name one.
+- **`trusted_reviewers` / `trusted_developers`** — GitHub logins. Ask once if
+  the user did not name them. The state script ignores review and fix markers
+  from any other account, and it ignores pending or dismissed reviews.
 
 ## Step 0: Establish the stack
 
@@ -58,8 +61,10 @@ When the user passes a task (and optional round cap):
 
 ## Main loop
 
-Fetch the stack PRs (`gh pr view` / `gh pr list` plus reviews and comments),
-write the JSON payload documented in `scripts/stack_state.py`, and run:
+Fetch every stack PR, including merged and closed parents (`gh pr view` with
+`reviews` and `comments`, which include `author.login` and review `state`).
+Write the JSON payload documented in `scripts/stack_state.py`, including
+`trusted_reviewers` and `trusted_developers`, and run:
 
 ```bash
 python3 scripts/stack_state.py develop payload.json
@@ -104,14 +109,25 @@ Only when the script says `address`. An `approved` verdict is not this action.
 
 ### merge
 
-Prefer `gh pr merge --merge`. If the repo forbids merge commits, use
-squash/rebase as required. After the merge, ask the script again — the child
-usually needs `retarget`, then maybe `sync`. Do not merge while a Critical or
-High from the latest external review is still unfixed.
+```bash
+gh pr merge <pr> --merge --match-head-commit <head>
+```
+
+Use the `head` field from the script. If the repo forbids merge commits, use
+squash/rebase as required and still pass `--match-head-commit`. After the
+merge, ask the script again — the child usually needs `retarget`, then maybe
+`sync`, then `promote`.
+
+### promote
+
+Remove `remove_labels` and add `add_labels` on that PR. This is how a stacked
+child becomes `harness:awaiting-review` after its parent merges. Do it again
+when GitHub's mergeability was `UNKNOWN` and a later fetch says `MERGEABLE`.
 
 ### continue
 
-1. Create the next branch off `base_branch` from the script (trunk for index 1).
+1. Create the next branch off `base_branch` from the script, at `next_index`
+   (index 1 only when the stack has no PRs yet).
 2. Read and follow `develop-review` for that slice. The branch and base already
    exist. Skip its branch question and open the PR against that base.
 3. Stamp the `harness-stack` marker (`max-rounds` default 2).

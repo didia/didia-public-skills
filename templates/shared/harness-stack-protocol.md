@@ -82,14 +82,19 @@ runtime loop.
 
 - Stack order: PR *n* bases on the head branch of PR *n−1* (PR 1 bases on the
   repo trunk, e.g. `main` or `dev`).
-- Prefer `gh pr merge --merge` so child history stays intact. If the repo
-  forbids merge commits, use squash/rebase as required.
+- Merge with `gh pr merge --merge --match-head-commit <head>` using the head
+  the state script returned. An approval or fix marker counts only when its
+  SHA is the live head, its author is a trusted login, and the review is
+  submitted (not pending or dismissed).
 - After a parent merges, retarget the child yourself:
   `gh pr edit <child> --base <trunk-or-new-parent-head>`. GitHub does not
   reliably retarget children when the parent branch is kept. Do not depend on
   "Automatically delete head branches" or on `--delete-branch`.
-- Then sync the child if `mergeable` is `CONFLICTING`, before labeling it
-  `harness:awaiting-review`.
+- Then sync the child if `mergeable` is `CONFLICTING`. When it is
+  `MERGEABLE` and still labeled `harness:stacked`, the state script returns
+  `promote`: set `harness:awaiting-review` and clear `harness:stacked`.
+- A payload that omits a `stack-parent`, or whose parent is closed and
+  unmerged, is a stop. Do not retarget that child onto trunk.
 - At most two open PRs above the bottom may have zero `harness-review` markers.
   That is `max_unreviewed_ahead: 2`.
 

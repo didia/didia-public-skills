@@ -166,14 +166,16 @@ def _apply_effort_floor(matrix: dict[str, dict[str, str]], floor: str) -> None:
 def _require_distinct_critics(
     provider: str,
     planning_model: str,
+    validator_model: str,
     development_matrix: dict[str, dict[str, str]],
     review_matrix: dict[str, dict[str, str]],
 ) -> None:
-    review_models = {row["model"] for row in review_matrix.values()}
-    if planning_model in review_models:
+    # Plan validation uses the base review model, not the per-complexity matrix.
+    if planning_model == validator_model:
         raise SystemExit(
-            f"Provider {provider!r}: planning_model {planning_model!r} matches a review "
-            "model. The plan critic has to be a different model; use effort to control cost."
+            f"Provider {provider!r}: planning_model {planning_model!r} matches the plan "
+            "validator model. The plan critic has to be a different model; use effort to "
+            "control cost."
         )
     for level in COMPLEXITY_LEVELS:
         author = development_matrix[level]["model"]
@@ -299,6 +301,7 @@ def merge_provider_context(
     _require_distinct_critics(
         provider,
         planning_model,
+        review_model,
         development_matrix,
         review_matrix,
     )
@@ -378,7 +381,7 @@ def merge_provider_context(
     }
 
 
-def markdown_agent_to_toml(markdown: str) -> str:
+def markdown_agent_to_toml(markdown: str, *, include_model: bool = True) -> str:
     """Codex custom agents are TOML. Markdown frontmatter is not what Codex loads."""
     if not markdown.startswith("---"):
         raise SystemExit("Agent is missing frontmatter")
@@ -398,10 +401,13 @@ def markdown_agent_to_toml(markdown: str) -> str:
     lines = [
         f"name = {_toml_string(fields.get('name', ''))}",
         f"description = {_toml_string(fields.get('description', ''))}",
-        f"model = {_toml_string(fields.get('model', ''))}",
     ]
+    # Codex applies an agent file's model after the spawn arguments, so a pin
+    # here would hide per-complexity routing. Planning agents keep the pin.
+    if include_model and fields.get("model"):
+        lines.append(f"model = {_toml_string(fields['model'])}")
     effort = fields.get("model_reasoning_effort") or fields.get("effort")
-    if effort:
+    if include_model and effort:
         lines.append(f"model_reasoning_effort = {_toml_string(effort)}")
     lines.append('developer_instructions = """')
     lines.append(body.rstrip("\n"))
@@ -466,7 +472,12 @@ def render_tree(provider: str, ctx: dict, env: Environment) -> None:
         skill = AGENT_SKILL_MAP.get(basename)
         if provider == "codex":
             toml_name = Path(basename).with_suffix(".toml").name
-            toml = markdown_agent_to_toml(rendered)
+            # Developer and reviewer models come from the complexity row at spawn.
+            dynamic = basename in {
+                "develop-review-developer.md",
+                "develop-review-reviewer.md",
+            }
+            toml = markdown_agent_to_toml(rendered, include_model=not dynamic)
             top = out_root / "agents" / toml_name
             write_text(top, toml, stamp=False)
             if skill:
