@@ -2,7 +2,7 @@
 """Generate provider-specific skill trees from templates.
 
 Reads config.yaml for defaults; CLI flags override when passed.
-Emits committed trees under claude/ and codex/.
+Emits committed trees under claude/, codex/, and cursor/.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import argparse
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -37,16 +38,39 @@ SHARED_REFERENCES = {
         "stack-develop",
         "stack-review",
     ),
+    "complexity-rubric.md": (
+        "plan-review",
+        "develop-review",
+        "pr-review",
+        "plan-develop",
+    ),
 }
+
+COMPLEXITY_LEVELS = ("low", "medium", "high")
 
 KNOWN_LABELS = {
     "claude-sonnet-5": "Sonnet 5",
     "claude-opus-5": "Opus 5",
     "gpt-5": "GPT-5",
     "gpt-5.1": "GPT-5.1",
+    "gpt-5.6-sol": "GPT 5.6 Sol",
+    "gpt-5.6-terra": "GPT 5.6 Terra",
+    "gpt-6.1-sol": "GPT 6.1 Sol",
     "o3": "o3",
     "o4-mini": "o4-mini",
+    "sonnet": "Sonnet",
+    "opus": "Opus",
+    "inherit": "Auto",
+    "grok-4.7-high": "Grok",
+    "composer-2.5-fast": "Composer",
 }
+
+
+def readonly_line(merged: dict, readonly: bool) -> str:
+    """Cursor pins read-only subagents with `readonly: true`. Other providers omit it."""
+    if readonly and merged.get("readonly_subagents"):
+        return "readonly: true\n"
+    return ""
 
 
 def humanize_model(model_id: str) -> str:
@@ -72,6 +96,41 @@ def load_config(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def deep_merge_complexity_maps(
+    base: dict[str, Any] | None,
+    override: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    """Merge per-complexity maps cell-by-cell. Provider cells override default cells."""
+    result: dict[str, dict[str, Any]] = {}
+    for level, cell in (base or {}).items():
+        if isinstance(cell, dict):
+            result[str(level)] = dict(cell)
+    for level, cell in (override or {}).items():
+        key = str(level)
+        if isinstance(cell, dict):
+            result[key] = {**(result.get(key) or {}), **cell}
+    return result
+
+
+def resolve_complexity_matrix(
+    default_model: str,
+    overrides: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, str]]:
+    """Fill every complexity level with model + effort (defaults to the level name)."""
+    overrides = overrides or {}
+    matrix: dict[str, dict[str, str]] = {}
+    for level in COMPLEXITY_LEVELS:
+        cell = overrides.get(level) or {}
+        model = str(cell.get("model") or default_model)
+        effort = str(cell.get("effort") or level)
+        matrix[level] = {
+            "model": model,
+            "effort": effort,
+            "model_label": humanize_model(model),
+        }
+    return matrix
+
+
 def merge_provider_context(
     config: dict,
     provider: str,
@@ -82,7 +141,18 @@ def merge_provider_context(
     if provider not in providers:
         raise SystemExit(f"Unknown provider {provider!r}. Known: {sorted(providers)}")
 
-    merged = {**defaults, **(providers[provider] or {})}
+    provider_cfg = dict(providers[provider] or {})
+
+    development_by_complexity = deep_merge_complexity_maps(
+        defaults.pop("development_by_complexity", None),
+        provider_cfg.pop("development_by_complexity", None),
+    )
+    review_by_complexity = deep_merge_complexity_maps(
+        defaults.pop("review_by_complexity", None),
+        provider_cfg.pop("review_by_complexity", None),
+    )
+
+    merged = {**defaults, **provider_cfg}
     for key, value in cli_overrides.items():
         if value is not None:
             merged[key] = value
@@ -102,6 +172,12 @@ def merge_provider_context(
     if missing:
         raise SystemExit(f"Provider {provider!r} missing config keys: {missing}")
 
+    planning_effort = str(merged.get("planning_effort") or "high")
+    # Providers without a separate effort dial (e.g. Cursor) leave effort_key unset.
+    effort_key = merged.get("effort_key")
+    if effort_key is not None:
+        effort_key = str(effort_key)
+
     planning_label = merged.get("planning_model_label") or humanize_model(
         merged["planning_model"]
     )
@@ -112,17 +188,61 @@ def merge_provider_context(
         merged["review_model"]
     )
 
-    def invoke(name: str) -> str:
-        return str(merged["subagent_invoke"]).format(name=name)
+    development_matrix = resolve_complexity_matrix(
+        str(merged["development_model"]),
+        development_by_complexity,
+    )
+    review_matrix = resolve_complexity_matrix(
+        str(merged["review_model"]),
+        review_by_complexity,
+    )
+
+    invoke_template = str(merged["subagent_invoke"])
+
+    def invoke(
+        name: str,
+        model: str | None = None,
+        effort: str | None = None,
+    ) -> str:
+        kwargs: dict[str, str] = {"name": name}
+        if "{model}" in invoke_template:
+            kwargs["model"] = model if model is not None else ""
+        if "{effort}" in invoke_template:
+            kwargs["effort"] = effort if effort is not None else ""
+        return invoke_template.format(**kwargs)
+
+    planning_model = str(merged["planning_model"])
+    review_model = str(merged["review_model"])
+
+    invoke_developer_by_complexity = {
+        level: invoke(
+            "develop-review-developer",
+            row["model"],
+            row["effort"],
+        )
+        for level, row in development_matrix.items()
+    }
+    invoke_reviewer_by_complexity = {
+        level: invoke(
+            "develop-review-reviewer",
+            row["model"],
+            row["effort"],
+        )
+        for level, row in review_matrix.items()
+    }
 
     return {
         "provider": provider,
-        "planning_model": merged["planning_model"],
+        "planning_model": planning_model,
         "development_model": merged["development_model"],
-        "review_model": merged["review_model"],
+        "review_model": review_model,
+        "planning_effort": planning_effort,
+        "effort_key": effort_key,
         "planning_model_label": planning_label,
         "development_model_label": development_label,
         "review_model_label": review_label,
+        "development_matrix": development_matrix,
+        "review_matrix": review_matrix,
         "skills_dir": merged["skills_dir"],
         "agents_dir": merged["agents_dir"],
         "project_agents_dir": merged["project_agents_dir"],
@@ -130,10 +250,32 @@ def merge_provider_context(
         "environment_name": merged["environment_name"],
         "subagent_invoke": merged["subagent_invoke"],
         "invoke": invoke,
-        "invoke_planner": invoke("plan-review-planner"),
-        "invoke_validator": invoke("plan-review-validator"),
-        "invoke_developer": invoke("develop-review-developer"),
-        "invoke_reviewer": invoke("develop-review-reviewer"),
+        "invoke_planner": invoke(
+            "plan-review-planner",
+            planning_model,
+            planning_effort,
+        ),
+        "invoke_validator": invoke(
+            "plan-review-validator",
+            review_model,
+            planning_effort,
+        ),
+        "invoke_developer": invoke(
+            "develop-review-developer",
+            str(merged["development_model"]),
+            "medium",
+        ),
+        "invoke_reviewer": invoke(
+            "develop-review-reviewer",
+            review_model,
+            "medium",
+        ),
+        "invoke_developer_by_complexity": invoke_developer_by_complexity,
+        "invoke_reviewer_by_complexity": invoke_reviewer_by_complexity,
+        "planner_readonly": readonly_line(merged, True),
+        "validator_readonly": readonly_line(merged, True),
+        "developer_readonly": readonly_line(merged, False),
+        "reviewer_readonly": readonly_line(merged, True),
     }
 
 
@@ -194,14 +336,15 @@ def render_tree(provider: str, ctx: dict, env: Environment) -> None:
             bundled = out_root / "skills" / skill / "agents" / basename
             write_text(bundled, rendered, stamp=True)
 
-    # Shared references: same protocol file into each owning skill
+    # Shared references: same file into each owning skill
     shared_src = TEMPLATES / "shared"
     for filename, skills in SHARED_REFERENCES.items():
         src = shared_src / filename
         if not src.is_file():
             raise SystemExit(f"Missing shared reference: {src}")
+        dest_name = "protocol.md" if filename == "harness-stack-protocol.md" else filename
         for skill in skills:
-            dest = out_root / "skills" / skill / "references" / "protocol.md"
+            dest = out_root / "skills" / skill / "references" / dest_name
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
 
@@ -218,7 +361,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--provider",
-        choices=["claude", "codex", "all"],
+        choices=["claude", "codex", "cursor", "all"],
         default="all",
         help="Which provider tree(s) to generate (default: all)",
     )

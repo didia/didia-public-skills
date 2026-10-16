@@ -13,7 +13,7 @@ Workflows:
 | `stack-develop` | Cross-harness developer: stack PRs via develop-review, merge, sync |
 | `stack-review` | Cross-harness reviewer: eligible stack bottom via pr-review |
 
-Templates live under `templates/`. Generated trees are committed at `claude/` and `codex/`. **Edit templates and `config.yaml`, not the generated files.**
+Templates live under `templates/`. Generated trees are committed at `claude/`, `codex/`, and `cursor/`. **Edit templates and `config.yaml`, not the generated files.**
 
 ## Generate
 
@@ -27,6 +27,7 @@ python scripts/generate.py
 
 # one provider
 python scripts/generate.py --provider claude
+python scripts/generate.py --provider cursor
 
 # override models for this run
 python scripts/generate.py \
@@ -39,18 +40,21 @@ python scripts/generate.py \
 
 ## Config
 
-[`config.yaml`](config.yaml) sets default models and per-provider paths / compatibility / subagent invoke wording. Codex defaults use different model IDs than Claude.
+[`config.yaml`](config.yaml) sets default models and per-provider paths / compatibility / subagent invoke wording. Claude defaults are family aliases (`sonnet`, `opus`), which resolve to the latest model in that family. Codex has no equivalent alias, so its provider block names the current newest model in each family. Cursor slots take `inherit` (Auto), `grok-4.7-high` (Grok), or `composer-2.5-fast` (Composer). The default split is Composer for planning and development, Grok for review.
+
+Planning always runs at `planning_effort` (default `high`) on providers that support a separate effort dial (Claude / Codex). The plan's **Complexity** rating (`low` / `medium` / `high`) selects development and review spawn settings: effort where supported, otherwise model. Cursor has no `effort_key` — Complexity selects model and PR-review scope (focused vs full). Optional maps `development_by_complexity` and `review_by_complexity` can override `model` and/or `effort` per level; unspecified cells inherit the role model and use the complexity word as the effort when effort applies.
 
 Optional label overrides per provider: `planning_model_label`, `development_model_label`, `review_model_label`.
 
 ## Install
 
 ```bash
-# both providers, all skills (paths from config.yaml)
+# every provider, all skills (paths from config.yaml)
 python scripts/install.py
 
 # one provider / specific skill(s)
 python scripts/install.py --provider claude
+python scripts/install.py --provider cursor
 python scripts/install.py --provider codex --skill plan-review
 python scripts/install.py --provider claude plan-review develop-review
 ```
@@ -65,4 +69,5 @@ scripts/generate.py
 config.yaml
 claude/             # GENERATED
 codex/              # GENERATED
+cursor/             # GENERATED
 ```

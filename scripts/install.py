@@ -174,6 +174,7 @@ examples:
   python scripts/install.py --provider codex --skill plan-review
   python scripts/install.py --provider claude plan-review develop-review
   python scripts/install.py --provider all --skill pr-review --dry-run
+  python scripts/install.py --provider cursor
   python scripts/install.py --provider claude --project
 """.strip(),
     )
@@ -185,7 +186,7 @@ examples:
     )
     p.add_argument(
         "--provider",
-        choices=["claude", "codex", "all"],
+        choices=["claude", "codex", "cursor", "all"],
         default="all",
         help="Which provider tree(s) to install (default: all)",
     )

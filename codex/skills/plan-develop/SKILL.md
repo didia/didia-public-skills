@@ -1,6 +1,6 @@
 ---
 name: plan-develop
-description: End-to-end coding pipeline that chains plan-review (GPT 5.6 Sol plans, GPT 5.6 Sol validates) into develop-review (GPT 5.6 Terra builds, GPT 5.6 Sol reviews the real diff and opens the pull request). Use this whenever the user asks to implement, build, ship, or fix something and wants it turned into a PR with real cross-model review at both the plan and the code stage, or explicitly mentions "plan-develop", a plan-then-build pipeline, or wanting a second model to catch what the first missed before it becomes a PR. For just the planning half use plan-review; for just the implementation half (including the PR) use develop-review. Requires Codex or another environment with subagents, plus git and the gh CLI.
+description: End-to-end coding pipeline that chains plan-review (GPT 6.1 Sol plans, GPT 6.1 Sol validates) into develop-review (GPT 6.1 Sol builds, GPT 6.1 Sol reviews the real diff and opens the pull request). Use this whenever the user asks to implement, build, ship, or fix something and wants it turned into a PR with real cross-model review at both the plan and the code stage, or explicitly mentions "plan-develop", a plan-then-build pipeline, or wanting a second model to catch what the first missed before it becomes a PR. For just the planning half use plan-review; for just the implementation half (including the PR) use develop-review. Requires Codex or another environment with subagents, plus git and the gh CLI.
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), a git repo with a dev branch, the gh CLI authenticated for opening pull requests, and the plan-review and develop-review skills installed alongside this one.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
@@ -12,15 +12,19 @@ skills — this one just sequences them.
 
 ```
 Step 0  branch off dev
-Step 1  plan-review      → approved plan   (GPT 5.6 Sol plans, GPT 5.6 Sol validates, cap 3)
-Step 2  develop-review   → open PR         (GPT 5.6 Terra builds, GPT 5.6 Sol reviews, cap 5, opens PR)
+Step 1  plan-review      → approved plan   (GPT 6.1 Sol plans, GPT 6.1 Sol validates, both at high effort, cap 3)
+Step 2  develop-review   → open PR         (developer + reviewer at the plan's Complexity effort, cap 5, opens PR)
 ```
+
+The approved plan's **Complexity** rating (`low` / `medium` / `high`) selects development
+and review effort in Step 2. Planning itself always runs at high effort.
+See `references/complexity-rubric.md`.
 
 ## Why this shape
 
 A single model planning, writing, and reviewing its own code approves its own blind spots
 — it's hard to spot a flaw in an approach you just committed to. Both halves of this
-pipeline therefore split generative work (GPT 5.6 Sol / GPT 5.6 Terra) from adversarial work (GPT 5.6 Sol), with
+pipeline therefore split generative work (GPT 6.1 Sol / GPT 6.1 Sol) from adversarial work (GPT 6.1 Sol), with
 the critic getting fresh context and the real artifact rather than the author's account
 of it.
 
@@ -45,7 +49,7 @@ the pipeline:
   the skill that actually calls it; if it's missing, still run both loops — `develop-review`
   will hand back a reviewed, pushed branch instead of opening a PR — and say so up front
   rather than at the end.
-- **Subagents** (Codex). Without them there's no independent GPT 5.6 Sol
+- **Subagents** (Codex). Without them there's no independent GPT 6.1 Sol
   pass at all; say so and offer the sequential hat-switching substitute described in the
   two sub-skills.
 
@@ -66,9 +70,11 @@ Confirm the repo is on, or can cleanly branch from, `dev`. Create a working bran
 
 Read and follow the `plan-review` skill — normally at `~/.codex/skills/plan-review/SKILL.md`
 — with the task and constraints from Step 0. Run its full loop: planner drafts, validator
-critiques, revise until `PLAN_APPROVED`, capped at 3 iterations.
+critiques, revise until `PLAN_APPROVED`, capped at 3 iterations. Both planning agents run
+at high effort.
 
-Carry forward the plan **as the validator left it**, not the planner's last draft.
+Carry forward the plan **as the validator left it**, not the planner's last draft —
+including its **Complexity** line. That rating is what Step 2 uses for effort.
 
 If `plan-review` hits its cap without approval, the pipeline stops here. Show the user the
 latest plan and the outstanding objection and let them decide — don't start writing code
@@ -77,18 +83,21 @@ against a plan that failed validation, and don't pick a side on their behalf.
 ## Step 2: Develop, review, and open the PR (delegate to develop-review)
 
 Read and follow the `develop-review` skill — normally at
-`~/.codex/skills/develop-review/SKILL.md` — passing it the approved plan and the branch
-from Step 0. Run its full sequence end to end: developer builds, reviewer reads the real
-diff, targeted fixes until `IMPLEMENTATION_APPROVED` (capped at 5 cycles), then it pushes
-the branch and opens the PR itself (base `dev`, head `plan-develop/<slug>`).
+`~/.codex/skills/develop-review/SKILL.md` — passing it the approved plan (Complexity
+included) and the branch from Step 0. Run its full sequence end to end: developer builds,
+reviewer reads the real diff, targeted fixes until `IMPLEMENTATION_APPROVED` (capped at 5
+cycles), then it pushes the branch and opens the PR itself (base `dev`, head
+`plan-develop/<slug>`). Developer and reviewer spawn at the effort and model for the
+plan's Complexity rating.
 
 Skip that skill's own Step 0 branch question — the branch already exists from Step 0 here.
 Otherwise let it run its own Step 4 (the PR) rather than intercepting before that point;
 this skill has nothing to add there.
 
 Ask it to mention in the PR body that the change also went through `plan-review` first,
-and how many plan iterations that took — that's context `develop-review` doesn't have on
-its own, since it only sees the approved plan, not the loop that produced it.
+how many plan iterations that took, and the **Complexity** rating — that's context
+`develop-review` doesn't have on its own for the plan-loop history, since it only sees the
+approved plan, not the loop that produced it.
 
 If `develop-review` hits its fix/review cap without approval, it stops on its own and
 shows the user the diff and the reviewer's remaining objections — the pipeline ends there

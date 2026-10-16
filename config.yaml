@@ -2,9 +2,23 @@
 # CLI flags (--planning-model, --development-model, --review-model) override these.
 
 defaults:
-  planning_model: claude-opus-5
-  development_model: claude-sonnet-5
-  review_model: claude-opus-5
+  # Family aliases. Claude Code resolves each to the latest model in that family.
+  # Plan on Opus at high effort; develop on Sonnet and review on Opus at complexity effort.
+  planning_model: opus
+  development_model: sonnet
+  review_model: opus
+  # Planner and plan-validator always run at this effort (independent of task complexity).
+  planning_effort: high
+  # Optional per-complexity overrides for development / review. Any subset of levels,
+  # and either `model` or `effort` (or both). Unspecified cells inherit the role model
+  # and use the complexity word itself as the effort (low → low, medium → medium, high → high).
+  # development_by_complexity:
+  #   high:
+  #     model: opus
+  # review_by_complexity:
+  #   low:
+  #     model: sonnet
+  #     effort: low
 
 providers:
   claude:
@@ -12,17 +26,44 @@ providers:
     agents_dir: "~/.claude/agents"
     project_agents_dir: ".claude/agents"
     compatibility: "Claude Code or Cowork (needs Task-tool subagents to run separate generative/adversarial context windows)"
-    # {name} is replaced with the agent/subagent id when rendering
-    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}`"
+    # {name}, {model}, {effort} are filled when rendering spawn instructions
+    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}`, `model: {model}`, and `effort: {effort}`"
+    effort_key: effort
     environment_name: "Claude Code or Cowork"
 
   codex:
-    planning_model: gpt-5.6-Sol
-    development_model: gpt-5.6-Terra
-    review_model: gpt-5.6-Sol
+    # Plan/review on Sol; develop on Sol except low → Terra.
+    planning_model: gpt-6.1-sol
+    development_model: gpt-6.1-sol
+    review_model: gpt-6.1-sol
+    development_by_complexity:
+      low:
+        model: gpt-5.6-terra
     skills_dir: "~/.codex/skills"
     agents_dir: "~/.codex/agents"
     project_agents_dir: ".codex/agents"
     compatibility: "Codex (needs subagent support to run separate generative/adversarial context windows)"
-    subagent_invoke: "Spawn a subagent named `{name}` in a fresh context"
+    subagent_invoke: "Spawn a subagent named `{name}` in a fresh context with `model: {model}` and `model_reasoning_effort: {effort}`"
+    effort_key: model_reasoning_effort
     environment_name: "Codex"
+
+  cursor:
+    # No effort dial. Plan/review on Grok (Opus-like); develop on Composer (Sonnet-like).
+    # Low-complexity reviews stay on Composer to save the heavy model.
+    # Any slot can also be: inherit (Auto), grok-4.7-high, composer-2.5-fast.
+    planning_model: grok-4.7-high
+    development_model: composer-2.5-fast
+    review_model: grok-4.7-high
+    review_by_complexity:
+      low:
+        model: composer-2.5-fast
+    skills_dir: "~/.cursor/skills"
+    agents_dir: "~/.cursor/agents"
+    project_agents_dir: ".cursor/agents"
+    compatibility: "Cursor (needs Task-tool subagents to run separate generative/adversarial context windows)"
+    # Pass model explicitly. Omitting it makes Cursor use inherit and drop this pin.
+    # No {effort} — Cursor has no separate effort dial.
+    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}` and `model: {model}`"
+    environment_name: "Cursor"
+    # Read-only subagents get Cursor's readonly frontmatter (no file edits).
+    readonly_subagents: true

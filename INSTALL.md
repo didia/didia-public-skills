@@ -13,12 +13,13 @@ python scripts/generate.py
 Paths come from `config.yaml` (`skills_dir`, `agents_dir` per provider).
 
 ```bash
-# both providers, all skills
+# every provider, all skills
 python scripts/install.py
 
 # one provider
 python scripts/install.py --provider claude
 python scripts/install.py --provider codex
+python scripts/install.py --provider cursor
 
 # one or more specific skills
 python scripts/install.py --provider claude --skill plan-review
@@ -45,7 +46,12 @@ claude/skills/stack-review/     cross-harness stack reviewer (needs pr-review)
 claude/agents/                  four subagents (user-wide install)
 
 codex/…                         same skills/agents, Codex models + paths
+cursor/…                        same skills/agents, Cursor models + paths
 ```
+
+Cursor installs skills to `~/.cursor/skills` and subagents to `~/.cursor/agents`
+(or `<repo>/.cursor/agents` with `--project`). Model slots are `inherit` (Auto),
+`grok-4.7-high` (Grok), or `composer-2.5-fast` (Composer).
 
 Each loop skill also keeps a copy of its agents under its `agents/` directory so the
 skill stays self-contained in a project install.

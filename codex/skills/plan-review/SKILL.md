@@ -1,14 +1,19 @@
 ---
 name: plan-review
-description: Produces a battle-tested implementation plan for a coding task by looping a GPT 5.6 Sol planner against a GPT 5.6 Sol validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Codex).
+description: Produces a battle-tested implementation plan for a coding task by looping a GPT 6.1 Sol planner against a GPT 6.1 Sol validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Codex).
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows). Read-only on the repo — this skill never writes code.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Plan-Review
 
 A bounded two-model loop that turns a coding task into an approved implementation plan:
-**plan (GPT 5.6 Sol) → validate (GPT 5.6 Sol) → revise → …** until the validator approves or the
+**plan (GPT 6.1 Sol) → validate (GPT 6.1 Sol) → revise → …** until the validator approves or the
 cap is hit.
+
+Every approved plan carries a **Complexity** rating (`low` / `medium` / `high`). Downstream
+skills (`develop-review`, `pr-review`) use that rating to choose the model and effort. The
+planner and validator always run at **high** effort so classification is
+not cheapened by the rating itself. See `references/complexity-rubric.md`.
 
 ## Why this shape
 
@@ -28,7 +33,7 @@ separate concern — see `develop-review`, or `plan-develop` for both halves end
 Check before starting, and say plainly if something is missing rather than half-running it:
 
 - An environment with subagents. **In a plain chat interface with no subagent
-  capability you cannot get a genuinely independent GPT 5.6 Sol pass** — say so, and offer to run
+  capability you cannot get a genuinely independent GPT 6.1 Sol pass** — say so, and offer to run
   the two stages sequentially yourself, switching hats explicitly, as a weaker substitute.
 - A repository to ground the plan in. A plan written without reading the actual codebase
   is a guess; both subagents have read-only tools specifically so they can check.
@@ -36,8 +41,9 @@ Check before starting, and say plainly if something is missing rather than half-
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: gpt-5.6-Sol` or `model: gpt-5.6-Sol`) so the right model runs
-regardless of what the main session is using.
+frontmatter (`model: gpt-6.1-sol` / `model: gpt-6.1-sol`)
+and planning effort (`model_reasoning_effort: high`) so planning stays at
+high effort regardless of what the main session is using.
 
 Check whether `plan-review-planner` and `plan-review-validator` are already available. If
 not, copy both from this skill's `agents/` directory into either:
@@ -48,8 +54,8 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — GPT 5.6 Sol, drafts and revises the plan.
-- `plan-review-validator.md` — GPT 5.6 Sol, critiques and tightens it.
+- `plan-review-planner.md` — GPT 6.1 Sol at high effort, drafts and revises the plan.
+- `plan-review-validator.md` — GPT 6.1 Sol at high effort, critiques and tightens it.
 
 ## Step 0: Pin down the task
 
@@ -61,9 +67,9 @@ planner guess and the validator catch the guess three minutes later.
 Note any constraints the user gave (framework, deadline, "don't touch the auth layer") —
 these travel with the task into every subagent call, or they get silently dropped.
 
-## Step 1: Plan (GPT 5.6 Sol)
+## Step 1: Plan (GPT 6.1 Sol)
 
-Spawn a subagent named `plan-review-planner` in a fresh context. Give it:
+Spawn a subagent named `plan-review-planner` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high`. Give it:
 
 - the task description and any constraints from Step 0,
 - enough repo context to be useful: relevant directories, existing patterns worth
@@ -71,16 +77,17 @@ Spawn a subagent named `plan-review-planner` in a fresh context. Give it:
 - on later iterations, the validator's feedback verbatim.
 
 Ask for a plan, not code. The planner returns Approach / Files to touch / Edge cases &
-risks / Test plan.
+risks / Test plan / **Complexity** (`low` | `medium` | `high` plus a short reason).
 
-## Step 2: Validate (GPT 5.6 Sol)
+## Step 2: Validate (GPT 6.1 Sol)
 
-Spawn a subagent named `plan-review-validator` in a fresh context with the task and **the plan text itself** —
+Spawn a subagent named `plan-review-validator` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` with the task and **the plan text itself** —
 not the planner's reasoning transcript, not your summary of it. The whole point is a
 critique that isn't anchored by the planner's own justification.
 
 The validator ends with exactly one line: `PLAN_APPROVED` or
-`PLAN_NEEDS_REVISION: <specific feedback>`.
+`PLAN_NEEDS_REVISION: <specific feedback>`. It must reject a plan that lacks a valid
+Complexity rating or whose rating contradicts the described scope.
 
 - **Approved** → done. Go to Step 3.
 - **Needs revision** → back to Step 1 with the feedback, asking the planner to revise the
@@ -94,12 +101,15 @@ contested, and picking a side for the user hides that.
 ## Step 3: Hand back the approved plan
 
 Return the plan as the validator left it — the validator is allowed to rewrite parts, so
-its version is the one to carry forward, not the planner's last draft.
+its version is the one to carry forward, not the planner's last draft. Confirm the
+**Complexity** line is still present and accurate; that rating is what `develop-review`
+and `pr-review` will use for effort.
 
 Report alongside it:
 
 - how many iterations it took (one-pass approval and third-round approval mean different
   things about how settled the plan is),
+- the Complexity rating,
 - anything the validator flagged as a risk but approved anyway — that's the list worth
   watching during implementation.
 
