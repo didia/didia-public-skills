@@ -58,17 +58,21 @@ available. If not, copy both from this skill's `agents/` directory into either:
 The two agents:
 
 - `develop-review-developer.md` — writes the code and applies fixes.
-- `develop-review-reviewer.md` — reviews the diff.
+- `develop-review-reviewer.md` — reviews the diff. A different model from the developer.
 
 ## Effort routing by Complexity
 
-Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn every
-developer and reviewer call in this run from the matching row. Keep that row for the whole
-fix loop — do not re-rate mid-run. Pass only the arguments written in that row.
+Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn the
+developer and reviewer from that row. Pass only the arguments written in that row.
+
+You may **raise** the rating during the run when the work turns out heavier than the plan
+said (auth, money, migrations, concurrency, a public API). Use the new row for every
+spawn after that. Never lower the rating. The reviewer's effort is already floored, so a
+`low` row does not put the critic on low effort when this provider has an effort dial.
 
 | Complexity | Developer spawn | Reviewer spawn |
 |---|---|---|
-| low | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: low` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: low` |
+| low | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: low` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: medium` |
 | medium | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: medium` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: medium` |
 | high | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: high` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: high` |
 
@@ -77,7 +81,7 @@ Resolved defaults for this provider (config may override any cell):
 
 | Complexity | Developer model | Developer effort | Reviewer model | Reviewer effort |
 |---|---|---|---|---|
-| low | Sonnet (`sonnet`) | low | Opus (`opus`) | low |
+| low | Sonnet (`sonnet`) | low | Opus (`opus`) | medium |
 | medium | Sonnet (`sonnet`) | medium | Opus (`opus`) | medium |
 | high | Sonnet (`sonnet`) | high | Opus (`opus`) | high |
 

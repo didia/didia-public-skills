@@ -2,7 +2,7 @@
 name: plan-review-planner
 description: Drafts and revises an implementation plan for a coding task, without writing code. The generative half of the plan-review loop (also used by plan-develop).
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: high
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->

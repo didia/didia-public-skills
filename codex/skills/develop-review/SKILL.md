@@ -1,6 +1,6 @@
 ---
 name: develop-review
-description: Implements a coding task and loops a GPT 6.1 Sol developer against a GPT 6.1 Sol reviewer — reviewing the real diff, not the developer's summary — applying targeted fixes until the reviewer signs off, then opens a pull request. Use this whenever the user wants something built, implemented, or fixed with real cross-model code review before it's considered done, wants a second model to review a diff or catch what the first one missed, mentions "develop-review", or hands over an already-approved plan to be built. Also use it as the implementation half of the plan-develop pipeline. Requires an environment with subagents (Codex), a git repo, and the gh CLI.
+description: Implements a coding task and loops a GPT 6.1 Sol developer against a GPT 6 Astra reviewer — reviewing the real diff, not the developer's summary — applying targeted fixes until the reviewer signs off, then opens a pull request. Use this whenever the user wants something built, implemented, or fixed with real cross-model code review before it's considered done, wants a second model to review a diff or catch what the first one missed, mentions "develop-review", or hands over an already-approved plan to be built. Also use it as the implementation half of the plan-develop pipeline. Requires an environment with subagents (Codex), a git repo, and the gh CLI.
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), a git repository so the reviewer can read the real diff, and the gh CLI authenticated for opening pull requests.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
@@ -37,14 +37,14 @@ Check before starting, and say plainly if something is missing rather than half-
   the full develop/review loop — just hand back a pushed branch at the end instead of
   opening a PR, and say so up front rather than at the end.
 - An environment with subagents. **In a plain chat interface with no subagent
-  capability you cannot get a genuinely independent GPT 6.1 Sol review** — say so, and offer to
+  capability you cannot get a genuinely independent GPT 6 Astra review** — say so, and offer to
   run the two stages sequentially yourself, switching hats explicitly, as a weaker
   substitute.
 
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins a default model in
-frontmatter (`model: gpt-6.1-sol` or `model: gpt-6.1-sol`). Effort (and
+frontmatter (`model: gpt-6.1-sol` or `model: gpt-6-astra`). Effort (and
 any per-complexity model override) is passed on each spawn so it can follow the plan's
 Complexity rating.
 
@@ -57,29 +57,33 @@ available. If not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `develop-review-developer.md` — writes the code and applies fixes.
-- `develop-review-reviewer.md` — reviews the diff.
+- `develop-review-developer.toml` — writes the code and applies fixes.
+- `develop-review-reviewer.toml` — reviews the diff. A different model from the developer.
 
 ## Effort routing by Complexity
 
-Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn every
-developer and reviewer call in this run from the matching row. Keep that row for the whole
-fix loop — do not re-rate mid-run. Pass only the arguments written in that row.
+Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn the
+developer and reviewer from that row. Pass only the arguments written in that row.
+
+You may **raise** the rating during the run when the work turns out heavier than the plan
+said (auth, money, migrations, concurrency, a public API). Use the new row for every
+spawn after that. Never lower the rating. The reviewer's effort is already floored, so a
+`low` row does not put the critic on low effort when this provider has an effort dial.
 
 | Complexity | Developer spawn | Reviewer spawn |
 |---|---|---|
-| low | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-5.6-terra` and `model_reasoning_effort: low` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: low` |
-| medium | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: medium` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: medium` |
-| high | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` |
+| low | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-5.6-terra` and `model_reasoning_effort: low` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: medium` |
+| medium | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: medium` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: medium` |
+| high | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: high` |
 
 Resolved defaults for this provider (config may override any cell):
 
 
 | Complexity | Developer model | Developer effort | Reviewer model | Reviewer effort |
 |---|---|---|---|---|
-| low | GPT 5.6 Terra (`gpt-5.6-terra`) | low | GPT 6.1 Sol (`gpt-6.1-sol`) | low |
-| medium | GPT 6.1 Sol (`gpt-6.1-sol`) | medium | GPT 6.1 Sol (`gpt-6.1-sol`) | medium |
-| high | GPT 6.1 Sol (`gpt-6.1-sol`) | high | GPT 6.1 Sol (`gpt-6.1-sol`) | high |
+| low | GPT 5.6 Terra (`gpt-5.6-terra`) | low | GPT 6 Astra (`gpt-6-astra`) | medium |
+| medium | GPT 6.1 Sol (`gpt-6.1-sol`) | medium | GPT 6 Astra (`gpt-6-astra`) | medium |
+| high | GPT 6.1 Sol (`gpt-6.1-sol`) | high | GPT 6 Astra (`gpt-6-astra`) | high |
 
 
 ## Step 0: Establish what's being built

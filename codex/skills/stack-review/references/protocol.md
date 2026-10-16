@@ -30,7 +30,7 @@ version: 1
 stack-id: <slug>
 stack-index: 2
 stack-parent: 123
-max-rounds: 1
+max-rounds: 2
 -->
 ```
 
@@ -38,8 +38,8 @@ max-rounds: 1
 - `stack-index` — 1-based position; 1 is the bottom.
 - `stack-parent` — parent PR number, or empty on the bottom.
 - `max-rounds` — max `pr-review` passes by the external harness for this PR.
-  Default **1** when omitted from the user invocation. Copied onto every PR;
-  the reviewer never raises it.
+  Default **2** when omitted from the user invocation, so the reviewer sees the
+  fix. Copied onto every PR; the reviewer never raises it.
 
 ## Review and fix markers
 
@@ -83,6 +83,22 @@ runtime loop.
 - Stack order: PR *n* bases on the head branch of PR *n−1* (PR 1 bases on the
   repo trunk, e.g. `main` or `dev`).
 - Prefer `gh pr merge --merge` so child history stays intact. If the repo
-  forbids merge commits, use squash/rebase as required, then sync children.
-- After a parent merges, sync children before labeling them
+  forbids merge commits, use squash/rebase as required.
+- After a parent merges, retarget the child yourself:
+  `gh pr edit <child> --base <trunk-or-new-parent-head>`. GitHub does not
+  reliably retarget children when the parent branch is kept. Do not depend on
+  "Automatically delete head branches" or on `--delete-branch`.
+- Then sync the child if `mergeable` is `CONFLICTING`, before labeling it
   `harness:awaiting-review`.
+- At most two open PRs above the bottom may have zero `harness-review` markers.
+  That is `max_unreviewed_ahead: 2`.
+
+## Next action
+
+`scripts/stack_state.py` is the state machine. Fetch PR JSON, write the payload
+described in that script, and run `develop` or `review`. Do the one action it
+returns. Do not re-derive retarget, sync, address, or merge from this prose.
+
+Schedule the next poll with `/loop` or a scheduled wakeup. A foreground
+`sleep 60` does not work: Claude Code blocks long sleeps, and the context
+grows on every poll.

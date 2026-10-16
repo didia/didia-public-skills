@@ -15,18 +15,21 @@ Model and scope follow a **Complexity** rating (`low` / `medium` / `high`). See
 
 ## Model routing by Complexity
 
-After Phase 1, determine Complexity:
+After Phase 1, determine Complexity from the diff, not from the author's word:
 
-1. Prefer a **Complexity** line from an approved plan quoted or summarized in the PR body.
-2. Otherwise classify once with the rubric from the diff and PR description, then record
-   the rating.
+1. Classify with the rubric from the diff and PR description.
+2. A **Complexity** line in the body is a floor. If your reading is higher, use yours.
+   Never lower the rating because the body says `low`.
+3. **Focused** mode only when *your* rating is `low` and the diff does not touch auth,
+   money, migrations, concurrency, or a public API. Otherwise run the full review.
 
-Then pick scope and review model from that rating:
+Then pick scope and review model from that rating.
+
 
 
 | Complexity | Review mode | Review model |
 |---|---|---|
-| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | Composer (`composer-2.5-fast`) |
+| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | Grok (`grok-4.7-high`) |
 | medium | **Full** — every phase below | Grok (`grok-4.7-high`) |
 | high | **Full** — every phase below | Grok (`grok-4.7-high`) |
 
@@ -54,7 +57,7 @@ Record `headRefOid` — that SHA is what you are reviewing and what you will rep
 
 Then read the project's own rules, because a "defect" that contradicts a documented convention is noise: `CLAUDE.md`, `CONTRIBUTING.md`, `AGENTS.md`, `.cursorrules`, ADRs, and the architecture, schema, feature, and API docs relevant to what changed. Load `references/audit-checklist.md` now — it drives the rest of the review.
 
-After grounding, set Complexity as described under Effort routing, then continue in the
+After grounding, set Complexity as described under Model routing, then continue in the
 matching mode.
 
 ## Phase 2 — Build a private coverage matrix
@@ -101,6 +104,10 @@ Then compare against existing review threads. Don't repost what someone already 
 ## Phase 7 — Post the findings
 
 Full mechanics (payload shape, line/side semantics, 422 recovery, the `scripts/post_review.py` helper) are in `references/github-review-mechanics.md`. Read it before posting.
+
+If you are not the PR author, omit `event` in the `post_review.py` payload so the review
+stays a pending draft the user submits. Posting `COMMENT` or `REQUEST_CHANGES` is
+outward-facing; do that only when the user asked you to publish, or when you opened the PR.
 
 Post everything as **one batched review** so the author gets one notification, anchored to the narrowest relevant line. Each comment carries five things, because each answers a question the author would otherwise have to ask:
 
@@ -151,7 +158,7 @@ subagent is fine):
 
 | Complexity | Model |
 |---|---|
-| low | `composer-2.5-fast` |
+| low | `grok-4.7-high` |
 | medium | `grok-4.7-high` |
 | high | `grok-4.7-high` |
 

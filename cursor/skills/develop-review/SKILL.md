@@ -56,17 +56,21 @@ available. If not, copy both from this skill's `agents/` directory into either:
 The two agents:
 
 - `develop-review-developer.md` — writes the code and applies fixes.
-- `develop-review-reviewer.md` — reviews the diff.
+- `develop-review-reviewer.md` — reviews the diff. A different model from the developer.
 
 ## Model routing by Complexity
 
-Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn every
-developer and reviewer call in this run from the matching row. Keep that row for the whole
-fix loop — do not re-rate mid-run. Pass only the arguments written in that row.
+Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn the
+developer and reviewer from that row. Pass only the arguments written in that row.
+
+You may **raise** the rating during the run when the work turns out heavier than the plan
+said (auth, money, migrations, concurrency, a public API). Use the new row for every
+spawn after that. Never lower the rating. The reviewer's effort is already floored, so a
+`low` row does not put the critic on low effort when this provider has an effort dial.
 
 | Complexity | Developer spawn | Reviewer spawn |
 |---|---|---|
-| low | Invoke the Task tool with `subagent_type: develop-review-developer` and `model: composer-2.5-fast` | Invoke the Task tool with `subagent_type: develop-review-reviewer` and `model: composer-2.5-fast` |
+| low | Invoke the Task tool with `subagent_type: develop-review-developer` and `model: composer-2.5-fast` | Invoke the Task tool with `subagent_type: develop-review-reviewer` and `model: grok-4.7-high` |
 | medium | Invoke the Task tool with `subagent_type: develop-review-developer` and `model: composer-2.5-fast` | Invoke the Task tool with `subagent_type: develop-review-reviewer` and `model: grok-4.7-high` |
 | high | Invoke the Task tool with `subagent_type: develop-review-developer` and `model: composer-2.5-fast` | Invoke the Task tool with `subagent_type: develop-review-reviewer` and `model: grok-4.7-high` |
 
@@ -75,7 +79,7 @@ Resolved defaults for this provider (config may override any cell):
 
 | Complexity | Developer model | Reviewer model |
 |---|---|---|
-| low | Composer (`composer-2.5-fast`) | Composer (`composer-2.5-fast`) |
+| low | Composer (`composer-2.5-fast`) | Grok (`grok-4.7-high`) |
 | medium | Composer (`composer-2.5-fast`) | Grok (`grok-4.7-high`) |
 | high | Composer (`composer-2.5-fast`) | Grok (`grok-4.7-high`) |
 

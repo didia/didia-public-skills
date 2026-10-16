@@ -103,9 +103,11 @@ def copy_agents(
     src_agents = ROOT / provider / "agents"
     for name in agent_names:
         src = src_agents / name
+        if provider == "codex":
+            src = src.with_suffix(".toml")
         if not src.is_file():
             raise SystemExit(f"Missing agent file: {src}")
-        dest = dest_agents / name
+        dest = dest_agents / src.name
         print(f"  agent  {src.relative_to(ROOT)} → {dest}")
         if dry_run:
             continue

@@ -1,7 +1,7 @@
 ---
 name: plan-develop
 description: End-to-end coding pipeline that chains plan-review ({{ planning_model_label }} plans, {{ review_model_label }} validates) into develop-review ({{ development_model_label }} builds, {{ review_model_label }} reviews the real diff and opens the pull request). Use this whenever the user asks to implement, build, ship, or fix something and wants it turned into a PR with real cross-model review at both the plan and the code stage, or explicitly mentions "plan-develop", a plan-then-build pipeline, or wanting a second model to catch what the first missed before it becomes a PR. For just the planning half use plan-review; for just the implementation half (including the PR) use develop-review. Requires {{ environment_name }} or another environment with subagents, plus git and the gh CLI.
-compatibility: {{ compatibility }}, a git repo with a dev branch, the gh CLI authenticated for opening pull requests, and the plan-review and develop-review skills installed alongside this one.
+compatibility: {{ compatibility }}, a git repo with a {{ trunk }} branch, the gh CLI authenticated for opening pull requests, and the plan-review and develop-review skills installed alongside this one.
 ---
 
 # Plan-Develop
@@ -11,7 +11,7 @@ It is deliberately thin: the two review loops, and the PR they end in, live in t
 skills — this one just sequences them.
 
 ```
-Step 0  branch off dev
+Step 0  branch off {{ trunk }}
 Step 1  plan-review      → approved plan   ({{ planning_model_label }} plans, {{ review_model_label }} validates{% if effort_key %}, both at {{ planning_effort }} effort{% endif %}, cap 3)
 Step 2  develop-review   → open PR         (developer + reviewer{% if effort_key %} at the plan's Complexity effort{% endif %}, cap 5, opens PR)
 ```
@@ -44,7 +44,7 @@ the pipeline:
 - **The `plan-review` and `develop-review` skills**, installed alongside this one — this
   skill is an orchestrator and does nothing useful without them. They're normally in
   `{{ skills_dir }}/`.
-- **A git repository** with a `dev` branch to branch from and target.
+- **A git repository** with a `{{ trunk }}` branch to branch from and target.
 - **The `gh` CLI**, installed and authenticated (`gh auth status`). `develop-review` is
   the skill that actually calls it; if it's missing, still run both loops — `develop-review`
   will hand back a reviewed, pushed branch instead of opening a PR — and say so up front
@@ -63,8 +63,8 @@ Make sure you actually understand what's being asked before spending model calls
 the request is vague on scope (e.g. "add pagination" without which endpoint), ask one
 clarifying question rather than guessing — a misunderstood task costs both loops.
 
-Confirm the repo is on, or can cleanly branch from, `dev`. Create a working branch named
-`plan-develop/<short-slug>` off the latest `dev`, and do all the work there.
+Confirm the repo is on, or can cleanly branch from, `{{ trunk }}`. Create a working branch named
+`plan-develop/<short-slug>` off the latest `{{ trunk }}`, and do all the work there.
 
 ## Step 1: Plan (delegate to plan-review)
 
@@ -86,7 +86,7 @@ Read and follow the `develop-review` skill — normally at
 `{{ skills_dir }}/develop-review/SKILL.md` — passing it the approved plan (Complexity
 included) and the branch from Step 0. Run its full sequence end to end: developer builds,
 reviewer reads the real diff, targeted fixes until `IMPLEMENTATION_APPROVED` (capped at 5
-cycles), then it pushes the branch and opens the PR itself (base `dev`, head
+cycles), then it pushes the branch and opens the PR itself (base `{{ trunk }}`, head
 `plan-develop/<slug>`). Developer and reviewer spawn at the {% if effort_key %}effort and {% endif %}model for the
 plan's Complexity rating.
 

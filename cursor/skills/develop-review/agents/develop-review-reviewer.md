@@ -3,7 +3,6 @@ name: develop-review-reviewer
 description: Independently reviews a code implementation against its plan and general correctness/quality standards. The adversarial half of the develop-review loop (also used by plan-develop).
 tools: Read, Grep, Glob, Bash
 model: grok-4.7-high
-readonly: true
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 You are the review stage of a develop → review loop. You're the last check before this

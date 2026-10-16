@@ -1,13 +1,13 @@
 ---
 name: plan-review
-description: Produces a battle-tested implementation plan for a coding task by looping a Grok planner against a Grok validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Cursor).
+description: Produces a battle-tested implementation plan for a coding task by looping a Composer planner against a Grok validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Cursor).
 compatibility: Cursor (needs Task-tool subagents to run separate generative/adversarial context windows). Read-only on the repo — this skill never writes code.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Plan-Review
 
 A bounded two-model loop that turns a coding task into an approved implementation plan:
-**plan (Grok) → validate (Grok) → revise → …** until the validator approves or the
+**plan (Composer) → validate (Grok) → revise → …** until the validator approves or the
 cap is hit.
 
 Every approved plan carries a **Complexity** rating (`low` / `medium` / `high`). Downstream
@@ -41,7 +41,7 @@ Check before starting, and say plainly if something is missing rather than half-
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: grok-4.7-high` / `model: grok-4.7-high`) regardless of what the main session is using.
+frontmatter (`model: composer-2.5-fast` / `model: grok-4.7-high`) regardless of what the main session is using.
 
 Check whether `plan-review-planner` and `plan-review-validator` are already available. If
 not, copy both from this skill's `agents/` directory into either:
@@ -52,8 +52,8 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — Grok, drafts and revises the plan.
-- `plan-review-validator.md` — Grok, critiques and tightens it.
+- `plan-review-planner.md` — Composer, drafts and revises the plan.
+- `plan-review-validator.md` — Grok, critiques it. A different model from the planner.
 
 ## Step 0: Pin down the task
 
@@ -65,9 +65,9 @@ planner guess and the validator catch the guess three minutes later.
 Note any constraints the user gave (framework, deadline, "don't touch the auth layer") —
 these travel with the task into every subagent call, or they get silently dropped.
 
-## Step 1: Plan (Grok)
+## Step 1: Plan (Composer)
 
-Invoke the Task tool with `subagent_type: plan-review-planner` and `model: grok-4.7-high`. Give it:
+Invoke the Task tool with `subagent_type: plan-review-planner` and `model: composer-2.5-fast`. Give it:
 
 - the task description and any constraints from Step 0,
 - enough repo context to be useful: relevant directories, existing patterns worth
@@ -89,7 +89,9 @@ Complexity rating or whose rating contradicts the described scope.
 
 - **Approved** → done. Go to Step 3.
 - **Needs revision** → back to Step 1 with the feedback, asking the planner to revise the
-  existing plan rather than start over. **Cap: 3 plan iterations.**
+  existing plan rather than start over. If the validator rewrote any substance (approach,
+  files, or Complexity), this pass is required: the planner absorbs or rejects those edits,
+  and the validator does not approve a plan it just rewrote. **Cap: 3 plan iterations.**
 
 If three rounds pass without approval, stop. Show the user the latest plan and the
 validator's outstanding objection side by side, and let them call it — the two models

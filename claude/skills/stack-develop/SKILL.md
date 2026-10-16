@@ -24,11 +24,13 @@ Check up front and say what is missing:
 
 ## Configuration
 
-- **`max-rounds`** — from the user (`review rounds: 5`). Default **1**. Written
-  on the stack issue and every PR marker. Counts external `pr-review` passes
-  only; `develop-review` keeps its own internal cap of 5.
+- **`max-rounds`** — from the user (`review rounds: 5`). Default **2**, so the
+  external reviewer sees the fix. Written on the stack issue and every PR
+  marker. Counts external `pr-review` passes only; `develop-review` keeps its
+  own internal cap of 5.
 - **Trunk** — base of stack index 1 (`main`, `dev`, or whatever the user
-  confirms).
+  confirms). Default for a from-scratch stack in this repo's generator is
+  `dev` when the user does not name one.
 
 ## Step 0: Establish the stack
 
@@ -56,80 +58,68 @@ When the user passes a task (and optional round cap):
 
 ## Main loop
 
-Each pass, run these checks **in order**. Re-check before starting another
-slice. When idle, sleep about 60 seconds and poll again. Exit when every PR in
-the stack is merged, or a blocking finding cannot be fixed — then tell the user.
+Fetch the stack PRs (`gh pr view` / `gh pr list` plus reviews and comments),
+write the JSON payload documented in `scripts/stack_state.py`, and run:
 
-### 1. Sync
+```bash
+python3 scripts/stack_state.py develop payload.json
+```
 
-If a parent is merged, or a child reports `mergeable: CONFLICTING`:
+Do the one action it prints. Then fetch again and ask the script again. Do not
+re-derive the priority yourself. Schedule the next poll with `/loop` or a
+scheduled wakeup. Do not foreground-sleep.
 
-1. Set `harness:syncing` on the child (remove `harness:awaiting-review` /
-   `harness:stacked` while syncing).
-2. Fetch. Let GitHub retarget the base when the parent branch is gone.
-3. Update the head: merge the new base into the head and push. Use
+Exit when the script returns `stop`, or a blocking finding cannot be fixed —
+then tell the user.
+
+### retarget
+
+`gh pr edit <pr> --base <base>` using the `base` field. Then fetch again. Do
+not wait for GitHub to retarget children after a merge.
+
+### sync
+
+1. Set `harness:syncing` (remove `harness:awaiting-review` / `harness:stacked`).
+2. Merge the current base into the head and push. Use
    `git push --force-with-lease` on that head branch only when a rebase is
-   required to drop commits already on trunk (typical after squash merge).
-   Never force-push trunk.
-4. If the resolution changes behavior beyond taking one side of a conflict,
-   follow `develop-review` in **fix mode** on that diff and let its internal
-   reviewer sign off before clearing the label.
-5. Clear `harness:syncing` only after a successful push.
-6. Walk the stack from lowest `stack-index` upward.
-7. Do not set `harness:awaiting-review` until `mergeable` is `MERGEABLE`
-   (re-query when GitHub returns null).
+   required to drop commits already on trunk. Never force-push trunk.
+3. If the resolution changes behavior beyond taking one side of a conflict,
+   follow `develop-review` in **fix mode** and let its internal reviewer sign
+   off before clearing the label.
+4. Clear `harness:syncing` only after a successful push. Do not set
+   `harness:awaiting-review` until `mergeable` is `MERGEABLE`.
 
-### 2. Address external review
+### address
 
-If the bottom open PR has a `harness-review` for the current head with no
-matching `harness-fix` for that round:
+Only when the script says `address`. An `approved` verdict is not this action.
 
-1. Prefer this over starting new slice work. Finish an in-progress
-   `develop-review` (including its PR open) first if one is mid-flight.
+1. Finish an in-progress `develop-review` first if one is mid-flight.
 2. Set `harness:addressing-review` (remove `harness:awaiting-review`).
-3. Read and follow `develop-review` in **fix mode**: pass the external
-   comments verbatim; its developer applies targeted fixes; its internal
-   reviewer signs off on the new diff.
-4. The PR already exists — **skip** `develop-review`'s "open a pull request"
-   step; push to the existing head instead.
-5. Post a top-level comment with the `harness-fix` marker for that round and
+3. Read and follow `develop-review` in **fix mode** with the external comments.
+4. Skip `develop-review`'s "open a pull request" step; push to the existing head.
+5. Post a top-level comment with the `harness-fix` marker for that `round` and
    the new head SHA.
-6. Clear `harness:addressing-review`. If more external rounds remain
-   (`reviews posted < max-rounds`) and the last verdict was
-   `changes-requested`, set `harness:awaiting-review` again. If the verdict was
-   `approved`, or the cap is already used and fixes are pushed with internal
-   sign-off, go to Merge.
+6. Clear `harness:addressing-review`. If rounds remain and the verdict was
+   `changes-requested`, set `harness:awaiting-review` again.
 
-### 3. Merge
-
-On the bottom open PR, merge when:
-
-- the latest external verdict is `approved`, **or**
-- external `max-rounds` is already used, fixes for that last review are
-  pushed, and `develop-review`'s internal reviewer signed off.
-
-Do **not** merge while any Critical or High from the latest external review is
-still unfixed — stop and tell the user.
+### merge
 
 Prefer `gh pr merge --merge`. If the repo forbids merge commits, use
-squash/rebase as required, then Sync the child. After merge, Sync the next PR
-so it becomes the new bottom.
+squash/rebase as required. After the merge, ask the script again — the child
+usually needs `retarget`, then maybe `sync`. Do not merge while a Critical or
+High from the latest external review is still unfixed.
 
-### 4. Continue
+### continue
 
-If nothing above is pending:
+1. Create the next branch off `base_branch` from the script (trunk for index 1).
+2. Read and follow `develop-review` for that slice. The branch and base already
+   exist. Skip its branch question and open the PR against that base.
+3. Stamp the `harness-stack` marker (`max-rounds` default 2).
+4. Label the bottom `harness:awaiting-review` only if `MERGEABLE`; label open
+   PRs above it `harness:stacked`.
 
-1. Create the next branch off the current top head (or trunk for index 1).
-2. Read and follow `develop-review` for that slice. Tell it the branch and base
-   already exist: base is the parent head (trunk for the first PR). It must
-   skip its own branch question and open the PR against that base.
-3. After it returns, stamp the `harness-stack` marker onto the PR body.
-4. Label: bottom open PR → `harness:awaiting-review` (only if `MERGEABLE`);
-   every open PR above it → `harness:stacked`.
-
-New slice work does not start while an external review or a sync is waiting.
-Adopted PRs are not reimplemented; `develop-review` runs for them only on
-review fixes or non-trivial conflict resolution.
+The script refuses `continue` when two unreviewed PRs already sit above the
+bottom. Adopted PRs are not reimplemented.
 
 ## Honesty
 

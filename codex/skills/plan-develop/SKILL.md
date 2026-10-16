@@ -1,6 +1,6 @@
 ---
 name: plan-develop
-description: End-to-end coding pipeline that chains plan-review (GPT 6.1 Sol plans, GPT 6.1 Sol validates) into develop-review (GPT 6.1 Sol builds, GPT 6.1 Sol reviews the real diff and opens the pull request). Use this whenever the user asks to implement, build, ship, or fix something and wants it turned into a PR with real cross-model review at both the plan and the code stage, or explicitly mentions "plan-develop", a plan-then-build pipeline, or wanting a second model to catch what the first missed before it becomes a PR. For just the planning half use plan-review; for just the implementation half (including the PR) use develop-review. Requires Codex or another environment with subagents, plus git and the gh CLI.
+description: End-to-end coding pipeline that chains plan-review (GPT 6.1 Sol plans, GPT 6 Astra validates) into develop-review (GPT 6.1 Sol builds, GPT 6 Astra reviews the real diff and opens the pull request). Use this whenever the user asks to implement, build, ship, or fix something and wants it turned into a PR with real cross-model review at both the plan and the code stage, or explicitly mentions "plan-develop", a plan-then-build pipeline, or wanting a second model to catch what the first missed before it becomes a PR. For just the planning half use plan-review; for just the implementation half (including the PR) use develop-review. Requires Codex or another environment with subagents, plus git and the gh CLI.
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), a git repo with a dev branch, the gh CLI authenticated for opening pull requests, and the plan-review and develop-review skills installed alongside this one.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
@@ -12,7 +12,7 @@ skills — this one just sequences them.
 
 ```
 Step 0  branch off dev
-Step 1  plan-review      → approved plan   (GPT 6.1 Sol plans, GPT 6.1 Sol validates, both at high effort, cap 3)
+Step 1  plan-review      → approved plan   (GPT 6.1 Sol plans, GPT 6 Astra validates, both at high effort, cap 3)
 Step 2  develop-review   → open PR         (developer + reviewer at the plan's Complexity effort, cap 5, opens PR)
 ```
 
@@ -24,7 +24,7 @@ See `references/complexity-rubric.md`.
 
 A single model planning, writing, and reviewing its own code approves its own blind spots
 — it's hard to spot a flaw in an approach you just committed to. Both halves of this
-pipeline therefore split generative work (GPT 6.1 Sol / GPT 6.1 Sol) from adversarial work (GPT 6.1 Sol), with
+pipeline therefore split generative work (GPT 6.1 Sol / GPT 6.1 Sol) from adversarial work (GPT 6 Astra), with
 the critic getting fresh context and the real artifact rather than the author's account
 of it.
 
@@ -49,7 +49,7 @@ the pipeline:
   the skill that actually calls it; if it's missing, still run both loops — `develop-review`
   will hand back a reviewed, pushed branch instead of opening a PR — and say so up front
   rather than at the end.
-- **Subagents** (Codex). Without them there's no independent GPT 6.1 Sol
+- **Subagents** (Codex). Without them there's no independent GPT 6 Astra
   pass at all; say so and offer the sequential hat-switching substitute described in the
   two sub-skills.
 

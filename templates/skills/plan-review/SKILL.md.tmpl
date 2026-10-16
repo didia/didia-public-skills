@@ -54,8 +54,8 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — {{ planning_model_label }}{% if effort_key %} at {{ planning_effort }} effort{% endif %}, drafts and revises the plan.
-- `plan-review-validator.md` — {{ review_model_label }}{% if effort_key %} at {{ planning_effort }} effort{% endif %}, critiques and tightens it.
+- `plan-review-planner{{ agent_suffix }}` — {{ planning_model_label }}{% if effort_key %} at {{ planning_effort }} effort{% endif %}, drafts and revises the plan.
+- `plan-review-validator{{ agent_suffix }}` — {{ review_model_label }}{% if effort_key %} at {{ planning_effort }} effort{% endif %}, critiques it. A different model from the planner.
 
 ## Step 0: Pin down the task
 
@@ -91,7 +91,9 @@ Complexity rating or whose rating contradicts the described scope.
 
 - **Approved** → done. Go to Step 3.
 - **Needs revision** → back to Step 1 with the feedback, asking the planner to revise the
-  existing plan rather than start over. **Cap: 3 plan iterations.**
+  existing plan rather than start over. If the validator rewrote any substance (approach,
+  files, or Complexity), this pass is required: the planner absorbs or rejects those edits,
+  and the validator does not approve a plan it just rewrote. **Cap: 3 plan iterations.**
 
 If three rounds pass without approval, stop. Show the user the latest plan and the
 validator's outstanding objection side by side, and let them call it — the two models

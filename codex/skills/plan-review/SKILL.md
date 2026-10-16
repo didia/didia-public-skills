@@ -1,13 +1,13 @@
 ---
 name: plan-review
-description: Produces a battle-tested implementation plan for a coding task by looping a GPT 6.1 Sol planner against a GPT 6.1 Sol validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Codex).
+description: Produces a battle-tested implementation plan for a coding task by looping a GPT 6.1 Sol planner against a GPT 6 Astra validator until the validator signs off — no code is written. Use this whenever the user wants a plan, design, or approach worked out before implementation, wants a second model to poke holes in a plan, mentions "plan-review", "validate this plan", "review my approach", "stress-test this design", or asks to think something through properly before building it. Also use it as the planning half of the plan-develop pipeline. Requires an environment with subagents (Codex).
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows). Read-only on the repo — this skill never writes code.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Plan-Review
 
 A bounded two-model loop that turns a coding task into an approved implementation plan:
-**plan (GPT 6.1 Sol) → validate (GPT 6.1 Sol) → revise → …** until the validator approves or the
+**plan (GPT 6.1 Sol) → validate (GPT 6 Astra) → revise → …** until the validator approves or the
 cap is hit.
 
 Every approved plan carries a **Complexity** rating (`low` / `medium` / `high`). Downstream
@@ -33,7 +33,7 @@ separate concern — see `develop-review`, or `plan-develop` for both halves end
 Check before starting, and say plainly if something is missing rather than half-running it:
 
 - An environment with subagents. **In a plain chat interface with no subagent
-  capability you cannot get a genuinely independent GPT 6.1 Sol pass** — say so, and offer to run
+  capability you cannot get a genuinely independent GPT 6 Astra pass** — say so, and offer to run
   the two stages sequentially yourself, switching hats explicitly, as a weaker substitute.
 - A repository to ground the plan in. A plan written without reading the actual codebase
   is a guess; both subagents have read-only tools specifically so they can check.
@@ -41,7 +41,7 @@ Check before starting, and say plainly if something is missing rather than half-
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: gpt-6.1-sol` / `model: gpt-6.1-sol`)
+frontmatter (`model: gpt-6.1-sol` / `model: gpt-6-astra`)
 and planning effort (`model_reasoning_effort: high`) so planning stays at
 high effort regardless of what the main session is using.
 
@@ -54,8 +54,8 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — GPT 6.1 Sol at high effort, drafts and revises the plan.
-- `plan-review-validator.md` — GPT 6.1 Sol at high effort, critiques and tightens it.
+- `plan-review-planner.toml` — GPT 6.1 Sol at high effort, drafts and revises the plan.
+- `plan-review-validator.toml` — GPT 6 Astra at high effort, critiques it. A different model from the planner.
 
 ## Step 0: Pin down the task
 
@@ -79,9 +79,9 @@ Spawn a subagent named `plan-review-planner` in a fresh context with `model: gpt
 Ask for a plan, not code. The planner returns Approach / Files to touch / Edge cases &
 risks / Test plan / **Complexity** (`low` | `medium` | `high` plus a short reason).
 
-## Step 2: Validate (GPT 6.1 Sol)
+## Step 2: Validate (GPT 6 Astra)
 
-Spawn a subagent named `plan-review-validator` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` with the task and **the plan text itself** —
+Spawn a subagent named `plan-review-validator` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: high` with the task and **the plan text itself** —
 not the planner's reasoning transcript, not your summary of it. The whole point is a
 critique that isn't anchored by the planner's own justification.
 
@@ -91,7 +91,9 @@ Complexity rating or whose rating contradicts the described scope.
 
 - **Approved** → done. Go to Step 3.
 - **Needs revision** → back to Step 1 with the feedback, asking the planner to revise the
-  existing plan rather than start over. **Cap: 3 plan iterations.**
+  existing plan rather than start over. If the validator rewrote any substance (approach,
+  files, or Complexity), this pass is required: the planner absorbs or rejects those edits,
+  and the validator does not approve a plan it just rewrote. **Cap: 3 plan iterations.**
 
 If three rounds pass without approval, stop. Show the user the latest plan and the
 validator's outstanding objection side by side, and let them call it — the two models

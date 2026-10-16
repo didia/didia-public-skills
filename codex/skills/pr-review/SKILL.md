@@ -15,20 +15,23 @@ Effort and scope follow a **Complexity** rating (`low` / `medium` / `high`). See
 
 ## Effort routing by Complexity
 
-After Phase 1, determine Complexity:
+After Phase 1, determine Complexity from the diff, not from the author's word:
 
-1. Prefer a **Complexity** line from an approved plan quoted or summarized in the PR body.
-2. Otherwise classify once with the rubric from the diff and PR description, then record
-   the rating.
+1. Classify with the rubric from the diff and PR description.
+2. A **Complexity** line in the body is a floor. If your reading is higher, use yours.
+   Never lower the rating because the body says `low`.
+3. **Focused** mode only when *your* rating is `low` and the diff does not touch auth,
+   money, migrations, concurrency, or a public API. Otherwise run the full review.
 
-Then pick scope and spawn effort from that rating:
+Then pick scope and spawn effort from that rating.
+The reviewer's effort is floored at medium, so a low rating does not put the critic on low effort.
 
 
 | Complexity | Review mode | Review spawn (model + effort) |
 |---|---|---|
-| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | GPT 6.1 Sol (`gpt-6.1-sol`) at `low` |
-| medium | **Full** — every phase below | GPT 6.1 Sol (`gpt-6.1-sol`) at `medium` |
-| high | **Full** — every phase below | GPT 6.1 Sol (`gpt-6.1-sol`) at `high` |
+| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | GPT 6 Astra (`gpt-6-astra`) at `medium` |
+| medium | **Full** — every phase below | GPT 6 Astra (`gpt-6-astra`) at `medium` |
+| high | **Full** — every phase below | GPT 6 Astra (`gpt-6-astra`) at `high` |
 
 
 Say which Complexity and mode you are using before Phase 2.
@@ -102,6 +105,10 @@ Then compare against existing review threads. Don't repost what someone already 
 
 Full mechanics (payload shape, line/side semantics, 422 recovery, the `scripts/post_review.py` helper) are in `references/github-review-mechanics.md`. Read it before posting.
 
+If you are not the PR author, omit `event` in the `post_review.py` payload so the review
+stays a pending draft the user submits. Posting `COMMENT` or `REQUEST_CHANGES` is
+outward-facing; do that only when the user asked you to publish, or when you opened the PR.
+
 Post everything as **one batched review** so the author gets one notification, anchored to the narrowest relevant line. Each comment carries five things, because each answers a question the author would otherwise have to ask:
 
 1. **Severity** — Critical / High / Medium / Low (rubric in the checklist reference)
@@ -151,9 +158,9 @@ subagent is fine):
 
 | Complexity | Model | Effort |
 |---|---|---|
-| low | `gpt-6.1-sol` | `low` |
-| medium | `gpt-6.1-sol` | `medium` |
-| high | `gpt-6.1-sol` | `high` |
+| low | `gpt-6-astra` | `medium` |
+| medium | `gpt-6-astra` | `medium` |
+| high | `gpt-6-astra` | `high` |
 
 
 When spawning, pass that row's `model` and `model_reasoning_effort`. On a focused (`low`) review, keep the work in the parent unless a single pass clearly benefits from isolation.

@@ -27,39 +27,24 @@ asks for. You do **not** edit code or merge.
 
 ## Configuration
 
-- **`max-rounds`** — read from the PR's `harness-stack` marker. Default **1**
+- **`max-rounds`** — read from the PR's `harness-stack` marker. Default **2**
   if missing. Counts your `pr-review` passes only. Never raise the cap.
 - Blocking findings: Critical and High (same rubric as `pr-review`). Medium
   and Low do not set `changes-requested`.
 
 ## Main loop
 
-Poll with something like:
+Fetch open stack PRs (labels, body, `baseRefName`, `headRefOid`, `mergeable`,
+reviews, comments) and run:
 
 ```bash
-gh pr list --label harness:awaiting-review --state open --json number,title,body,labels,url
+python3 scripts/stack_state.py review payload.json
 ```
 
-Among candidates, pick the eligible PR with the lowest `stack-index` from the
-marker. When idle, sleep about 60 seconds and poll again. Exit when the user
-stops you, or when no open stack PRs remain and nothing is labeled
-`harness:awaiting-review` for a long idle stretch — say so and stop.
-
-### Eligibility
-
-Skip a PR unless **all** of these hold:
-
-1. It carries `harness:awaiting-review` (not only `harness:stacked`).
-2. It does **not** carry `harness:syncing` or `harness:addressing-review`.
-3. It is the stack bottom: `stack-parent` is empty, or that parent PR is
-   merged.
-4. `mergeable` is `MERGEABLE` (re-query when GitHub returns null). Do not
-   review while conflicts exist — the developer must sync first.
-5. This `headRefOid` has no `harness-review` marker yet.
-6. Count of existing `harness-review` markers on the PR is less than
-   `max-rounds`.
-
-Do not post a "waiting" or "still polling" comment on every idle poll.
+Do the `review` action it prints, or wait. Do not re-derive eligibility. Do not
+post a "waiting" comment on an idle poll. Schedule the next poll with `/loop`
+or a scheduled wakeup. Do not foreground-sleep. Exit when the script returns
+`stop`, or when the user stops you.
 
 ### Review
 
@@ -83,10 +68,9 @@ When a PR is eligible:
    and the developer sets `harness:awaiting-review` again — and only if
    rounds remain.
 
-With `max-rounds: 1`, you review once. The developer may still apply blocking
-fixes and merge without a second pass. With a higher cap, `approved` stops
-early; `changes-requested` allows another review after the fix push, up to
-the cap.
+Default `max-rounds` is 2, so a `changes-requested` review gets a second pass
+after the fix. `approved` stops early. The developer may merge once the cap is
+used and the fix is pushed.
 
 ## Honesty
 
