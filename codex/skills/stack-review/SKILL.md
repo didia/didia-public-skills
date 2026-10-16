@@ -1,0 +1,82 @@
+---
+name: stack-review
+description: Use when the user says you are the reviewer in a cross-harness review, asks to watch a stack of PRs for harness:awaiting-review, mentions "stack-review", or wants another harness to review stacked PRs while a developer keeps opening child PRs. Also use when they point at a repo and ask you to review the bottom of a labeled stack until the round cap is hit. Requires pr-review installed on this harness and the gh CLI.
+compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), pr-review installed alongside this skill, and the gh CLI authenticated for reading PRs and posting reviews.
+---
+<!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
+# Stack-Review
+
+Orchestrates external review of a PR stack on **this** harness while another
+harness runs `stack-develop`. You do not invent a review procedure: every
+review follows `pr-review`. You own eligibility, the round cap, and the
+`harness-review` marker.
+
+Read `references/protocol.md` before the first review. That file is the
+contract both harnesses share.
+
+## Prerequisites
+
+Check up front and say what is missing:
+
+- **`pr-review`** at `~/.codex/skills/pr-review/SKILL.md` (or the project
+  install path). This skill does nothing useful without it.
+- Authenticated **`gh`** (`gh auth status`).
+
+You do not need a local clone of the feature branch beyond what `pr-review`
+asks for. You do **not** edit code or merge.
+
+## Configuration
+
+- **`max-rounds`** — read from the PR's `harness-stack` marker. Default **2**
+  if missing. Counts your `pr-review` passes only. Never raise the cap.
+- Blocking findings: Critical and High (same rubric as `pr-review`). Medium
+  and Low do not set `changes-requested`.
+
+## Main loop
+
+Fetch the stack, including merged and closed parents, with review `author` and
+`state` and comment authors. Pass the same `trusted_reviewers` and
+`trusted_developers` logins the developer harness uses, and run:
+
+```bash
+python3 scripts/stack_state.py review payload.json
+```
+
+Do the `review` action it prints, or wait. Do not re-derive eligibility. Do not
+post a "waiting" comment on an idle poll. Schedule the next poll with `/loop`
+or a scheduled wakeup. Do not foreground-sleep. Exit when the script returns
+`stop`, or when the user stops you.
+
+### Review
+
+When a PR is eligible:
+
+1. Record `headRefOid` and the next `round` number (existing markers + 1).
+2. Read and follow `pr-review` **end to end** for that PR. Do not summarize,
+   shorten, or replace it with a custom pass.
+3. Ask it to include this HTML comment at the end of the single review body
+   it posts:
+
+   ```html
+   <!-- harness-review round: N verdict: approved|changes-requested head: <sha> -->
+   ```
+
+4. Set `verdict` from its findings: any remaining Critical or High →
+   `changes-requested`; otherwise `approved`.
+5. After that one review is posted, remove `harness:awaiting-review` from the
+   PR (leave other labels alone; the developer will re-label as needed).
+6. After `changes-requested`, the script will not ask for another round until
+   a trusted `harness-fix` names the live head. A sync push alone does not
+   start one. Sign the review with your trusted login.
+
+Default `max-rounds` is 2, so a `changes-requested` review gets a second pass
+after the fix. `approved` stops early. The developer may merge once the cap is
+used and the fix is pushed.
+
+## Honesty
+
+- Do not edit code, push branches, or merge.
+- Do not review stacked (non-bottom) PRs, conflicting PRs, or PRs still
+  labeled `harness:syncing` / `harness:addressing-review`.
+- Do not raise `max-rounds` or invent a second review procedure.
+- Do not spawn `stack-develop`; the other harness runs that skill.

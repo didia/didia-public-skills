@@ -10,6 +10,11 @@ A bounded two-model loop that turns a coding task into an approved implementatio
 **plan ({{ planning_model_label }}) → validate ({{ review_model_label }}) → revise → …** until the validator approves or the
 cap is hit.
 
+Every approved plan carries a **Complexity** rating (`low` / `medium` / `high`). Downstream
+skills (`develop-review`, `pr-review`) use that rating to choose the model{% if effort_key %} and effort{% endif %}. The
+planner and validator always run {% if effort_key %}at **{{ planning_effort }}** effort{% else %}on their pinned models{% endif %} so classification is
+not cheapened by the rating itself. See `references/complexity-rubric.md`.
+
 ## Why this shape
 
 A model that drafts a plan is a poor judge of that plan. It has already committed to an
@@ -36,8 +41,9 @@ Check before starting, and say plainly if something is missing rather than half-
 ## Setup: install the two subagents (once)
 
 This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: {{ planning_model }}` or `model: {{ review_model }}`) so the right model runs
-regardless of what the main session is using.
+frontmatter (`model: {{ planning_model }}` / `model: {{ review_model }}`){% if effort_key %}
+and planning effort (`{{ effort_key }}: {{ planning_effort }}`) so planning stays at
+{{ planning_effort }} effort{% endif %} regardless of what the main session is using.
 
 Check whether `plan-review-planner` and `plan-review-validator` are already available. If
 not, copy both from this skill's `agents/` directory into either:
@@ -48,8 +54,8 @@ not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `plan-review-planner.md` — {{ planning_model_label }}, drafts and revises the plan.
-- `plan-review-validator.md` — {{ review_model_label }}, critiques and tightens it.
+- `plan-review-planner{{ agent_suffix }}` — {{ planning_model_label }}{% if effort_key %} at {{ planning_effort }} effort{% endif %}, drafts and revises the plan.
+- `plan-review-validator{{ agent_suffix }}` — {{ review_model_label }}{% if effort_key %} at {{ planning_effort }} effort{% endif %}, critiques it. A different model from the planner.
 
 ## Step 0: Pin down the task
 
@@ -71,7 +77,7 @@ these travel with the task into every subagent call, or they get silently droppe
 - on later iterations, the validator's feedback verbatim.
 
 Ask for a plan, not code. The planner returns Approach / Files to touch / Edge cases &
-risks / Test plan.
+risks / Test plan / **Complexity** (`low` | `medium` | `high` plus a short reason).
 
 ## Step 2: Validate ({{ review_model_label }})
 
@@ -80,11 +86,14 @@ not the planner's reasoning transcript, not your summary of it. The whole point 
 critique that isn't anchored by the planner's own justification.
 
 The validator ends with exactly one line: `PLAN_APPROVED` or
-`PLAN_NEEDS_REVISION: <specific feedback>`.
+`PLAN_NEEDS_REVISION: <specific feedback>`. It must reject a plan that lacks a valid
+Complexity rating or whose rating contradicts the described scope.
 
 - **Approved** → done. Go to Step 3.
 - **Needs revision** → back to Step 1 with the feedback, asking the planner to revise the
-  existing plan rather than start over. **Cap: 3 plan iterations.**
+  existing plan rather than start over. If the validator rewrote any substance (approach,
+  files, or Complexity), this pass is required: the planner absorbs or rejects those edits,
+  and the validator does not approve a plan it just rewrote. **Cap: 3 plan iterations.**
 
 If three rounds pass without approval, stop. Show the user the latest plan and the
 validator's outstanding objection side by side, and let them call it — the two models
@@ -94,12 +103,15 @@ contested, and picking a side for the user hides that.
 ## Step 3: Hand back the approved plan
 
 Return the plan as the validator left it — the validator is allowed to rewrite parts, so
-its version is the one to carry forward, not the planner's last draft.
+its version is the one to carry forward, not the planner's last draft. Confirm the
+**Complexity** line is still present and accurate; that rating is what `develop-review`
+and `pr-review` will use{% if effort_key %} for effort{% endif %}.
 
 Report alongside it:
 
 - how many iterations it took (one-pass approval and third-round approval mean different
   things about how settled the plan is),
+- the Complexity rating,
 - anything the validator flagged as a risk but approved anyway — that's the list worth
   watching during implementation.
 

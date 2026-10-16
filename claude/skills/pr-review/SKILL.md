@@ -10,14 +10,37 @@ A review is only worth the author's attention if it finds things they would not 
 
 This skill runs a full review of the **current PR head** — not an incremental pass over the latest commits, and not a re-tread of whatever was discussed in earlier threads.
 
-## Before starting: calibrate scope
+Effort and scope follow a **Complexity** rating (`low` / `medium` / `high`). See
+`references/complexity-rubric.md`.
 
-A 40-line typo fix does not need a coverage matrix. Ask yourself which mode fits, and say which one you're doing:
+## Effort routing by Complexity
 
-- **Full review** (the default here): the PR touches data models, auth, state machines, money, concurrency, or spans more than a handful of files. Run every phase below.
-- **Focused review**: small or narrow diff. Run phases 1, 3, 6, 7 and skip the matrix. Tell the user you scoped it down and why.
+After Phase 1, determine Complexity from the diff, not from the author's word:
 
-If the user asked for an exhaustive review, deliver a full review or explicitly report what you did not cover. Never describe a review as exhaustive when a changed file or checklist category was skipped — an overstated coverage claim is worse than an honest gap, because it stops the author from looking there themselves.
+1. Classify with the rubric from the diff and PR description.
+2. A **Complexity** line in the body is a floor. If your reading is higher, use yours.
+   Never lower the rating because the body says `low`.
+3. **Focused** mode only when *your* rating is `low` and the diff does not touch auth,
+   money, migrations, concurrency, or a public API. Otherwise run the full review.
+
+Then pick scope and spawn effort from that rating.
+The reviewer's effort is floored at medium, so a low rating does not put the critic on low effort.
+
+
+| Complexity | Review mode | Review spawn (model + effort) |
+|---|---|---|
+| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | Opus (`opus`) at `medium` |
+| medium | **Full** — every phase below | Opus (`opus`) at `medium` |
+| high | **Full** — every phase below | Opus (`opus`) at `high` |
+
+
+Say which Complexity and mode you are using before Phase 2.
+
+If the user asked for an exhaustive review, deliver a full review (treat as at least
+`medium`) or explicitly report what you did not cover. Never describe a review as
+exhaustive when a changed file or checklist category was skipped — an overstated coverage
+claim is worse than an honest gap, because it stops the author from looking there
+themselves.
 
 ## Phase 1 — Ground yourself in current state
 
@@ -34,7 +57,12 @@ Record `headRefOid` — that SHA is what you are reviewing and what you will rep
 
 Then read the project's own rules, because a "defect" that contradicts a documented convention is noise: `CLAUDE.md`, `CONTRIBUTING.md`, `AGENTS.md`, `.cursorrules`, ADRs, and the architecture, schema, feature, and API docs relevant to what changed. Load `references/audit-checklist.md` now — it drives the rest of the review.
 
+After grounding, set Complexity as described under Effort routing, then continue in the
+matching mode.
+
 ## Phase 2 — Build a private coverage matrix
+
+Skip this phase on a **focused** (`low`) review.
 
 Not for the user; for you. It's the mechanism that stops the review from drifting into whatever caught your eye first. In a scratch file, map each item below to *where it's implemented* and *what test exercises it*, leaving the test cell blank when nothing does — blank cells are candidate findings:
 
@@ -53,9 +81,13 @@ For each user-visible workflow the PR touches, follow one request the whole way:
 
 ## Phase 4 — Run the targeted audits
 
+Skip this phase on a **focused** (`low`) review.
+
 Work through `references/audit-checklist.md`. It's organized by area (data layer, authorization, concurrency, lifecycle, input boundaries, frontend state, accessibility, async/notifications, storage, compatibility, tests, docs) with a relevance trigger on each — skip a section only when nothing in the diff touches it, and note the skip.
 
 ## Phase 5 — Verify rather than assume
+
+Skip this phase on a **focused** (`low`) review (still glance at CI from Phase 1).
 
 Green CI means the tests that exist passed. It says nothing about the paths nobody wrote a test for, which is where you're looking.
 
@@ -72,6 +104,10 @@ Then compare against existing review threads. Don't repost what someone already 
 ## Phase 7 — Post the findings
 
 Full mechanics (payload shape, line/side semantics, 422 recovery, the `scripts/post_review.py` helper) are in `references/github-review-mechanics.md`. Read it before posting.
+
+If you are not the PR author, omit `event` in the `post_review.py` payload so the review
+stays a pending draft the user submits. Posting `COMMENT` or `REQUEST_CHANGES` is
+outward-facing; do that only when the user asked you to publish, or when you opened the PR.
 
 Post everything as **one batched review** so the author gets one notification, anchored to the narrowest relevant line. Each comment carries five things, because each answers a question the author would otherwise have to ask:
 
@@ -94,6 +130,7 @@ End your turn with:
 ## Review summary
 - Reviewed commit: <sha>
 - Review link: <url>
+- Complexity: <low|medium|high> (<focused|full> mode)
 
 ### Findings by severity
 Critical / High / Medium / Low — each with file:line and one-line description
@@ -113,10 +150,31 @@ The residual-risk section is not a formality. It is how the author learns where 
 
 ## Parallelism
 
-If subagents are available, split the work three ways after Phase 1, giving each the same PR context:
+If subagents are available, split the work three ways after Phase 1 (and after Complexity
+is set), giving each the same PR context. Spawn each pass with the review model and effort
+for that Complexity (not the develop-review reviewer agent — any capable read-only
+subagent is fine):
+
+
+| Complexity | Model | Effort |
+|---|---|---|
+| low | `opus` | `medium` |
+| medium | `opus` | `medium` |
+| high | `opus` | `high` |
+
+
+When spawning, pass that row's `model` and `effort`. On a focused (`low`) review, keep the work in the parent unless a single pass clearly benefits from isolation.
+
+Pass assignments (full mode):
 
 1. data layer, authorization, and concurrency
 2. frontend, client state, and accessibility
 3. end-to-end workflows, storage, async paths, and test quality
 
-Reconcile their findings against the code yourself before posting anything. Subagents miss cross-cutting interactions and occasionally report plausible-sounding issues that the code already handles — you own the accuracy of what gets posted. Without subagents, run the same three passes sequentially; keeping them separate matters more than running them concurrently, since each pass asks a different question of the same code.
+Reconcile their findings against the code yourself before posting anything. Subagents miss
+cross-cutting interactions and occasionally report plausible-sounding issues that the code
+already handles — you own the accuracy of what gets posted.
+
+Without subagents, state the Complexity rating and run the matching mode in the current
+session. A mid-turn effort change is not reliable, so do not promise a
+different effort than the session already has.

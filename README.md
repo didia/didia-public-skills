@@ -10,8 +10,10 @@ Workflows:
 | `develop-review` | Bounded develop → review loop, then open a PR |
 | `plan-develop` | Orchestrator: branch → plan-review → develop-review → PR |
 | `pr-review` | Deep GitHub PR review with inline comments |
+| `stack-develop` | Cross-harness developer: stack PRs via develop-review, merge, sync |
+| `stack-review` | Cross-harness reviewer: eligible stack bottom via pr-review |
 
-Templates live under `templates/`. Generated trees are committed at `claude/` and `codex/`. **Edit templates and `config.yaml`, not the generated files.**
+Templates live under `templates/`. Generated trees are committed at `claude/`, `codex/`, and `cursor/`. **Edit templates and `config.yaml`, not the generated files.**
 
 ## Generate
 
@@ -25,6 +27,7 @@ python scripts/generate.py
 
 # one provider
 python scripts/generate.py --provider claude
+python scripts/generate.py --provider cursor
 
 # override models for this run
 python scripts/generate.py \
@@ -33,22 +36,29 @@ python scripts/generate.py \
   --review-model claude-opus-5
 ```
 
-**Precedence:** CLI flags → provider block in `config.yaml` → `defaults`.
+**Precedence:** CLI flags replace the role model, including every per-complexity `model` cell. Provider block overrides `defaults`. Effort cells in a complexity map stay unless you change them in config. A CLI review model that matches the developer model is rejected.
 
 ## Config
 
-[`config.yaml`](config.yaml) sets default models and per-provider paths / compatibility / subagent invoke wording. Codex defaults use different model IDs than Claude.
+[`config.yaml`](config.yaml) sets default models and per-provider paths / compatibility / subagent invoke wording. Claude defaults are family aliases (`sonnet`, `opus`), which resolve to the latest model in that family. Codex has no equivalent alias, so its provider block names a current slug (`gpt-6.1-sol`, `gpt-5.6-terra`, `gpt-6-astra`). Cursor slots take `inherit` (Auto), `grok-4.7-high` (Grok), or `composer-2.5-fast` (Composer). The critic is a different model from the author: Sonnet plans and builds while Opus reviews; Sol plans and builds while Astra reviews; Composer plans and builds while Grok reviews. Low-complexity Codex development steps down to Terra. Effort is how cost is controlled.
+
+Planning always runs at `planning_effort` (default `high`) on providers that support a separate effort dial (Claude / Codex). The plan's **Complexity** rating (`low` / `medium` / `high`) selects development and review spawn settings. During implementation the rating may be raised, never lowered. Review effort is floored at `review_effort_floor` (default `medium`). Cursor has no `effort_key` — Complexity selects PR-review scope (focused vs full), and the review model stays Grok. Optional maps `development_by_complexity` and `review_by_complexity` can override `model` and/or `effort` per level; unspecified cells inherit the role model and use the complexity word as the effort when effort applies. A malformed map (unknown level, non-mapping cell, unknown key) stops generation.
+
+`trunk` (default `dev`) is the branch `plan-develop` uses. Codex agents are generated as `.toml` (`name`, `description`, `model`, optional `model_reasoning_effort`, `developer_instructions`). Cursor `readonly_subagents` is false so planner, validator, and reviewer can still run git and tests; their tool lists omit Write and Edit.
+
+`stack-develop` and `stack-review` call `scripts/stack_state.py` for the next action (retarget, sync, address, merge, continue, review). The script caps unreviewed PRs above the stack bottom at two. Poll with `/loop` or a scheduled wakeup.
 
 Optional label overrides per provider: `planning_model_label`, `development_model_label`, `review_model_label`.
 
 ## Install
 
 ```bash
-# both providers, all skills (paths from config.yaml)
+# every provider, all skills (paths from config.yaml)
 python scripts/install.py
 
 # one provider / specific skill(s)
 python scripts/install.py --provider claude
+python scripts/install.py --provider cursor
 python scripts/install.py --provider codex --skill plan-review
 python scripts/install.py --provider claude plan-review develop-review
 ```
@@ -63,4 +73,5 @@ scripts/generate.py
 config.yaml
 claude/             # GENERATED
 codex/              # GENERATED
+cursor/             # GENERATED
 ```

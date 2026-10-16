@@ -1,10 +1,24 @@
 # Default models and per-provider settings for skill generation.
 # CLI flags (--planning-model, --development-model, --review-model) override these.
+# A critic (plan validator, code reviewer) must be a different model from the author.
+# Effort controls cost. It does not replace a second model.
 
 defaults:
-  planning_model: claude-opus-5
-  development_model: claude-sonnet-5
-  review_model: claude-opus-5
+  trunk: dev
+  # Generative planner. The critic is review_model, which must differ.
+  planning_model: sonnet
+  development_model: sonnet
+  review_model: opus
+  # Planner and plan-validator always run at this effort.
+  planning_effort: high
+  # Review effort never drops below this, even when Complexity is low.
+  review_effort_floor: medium
+  # Optional per-complexity overrides. Any subset of low/medium/high, and either
+  # model or effort. Unspecified cells inherit the role model and use the
+  # complexity word as the effort, then the review floor applies.
+  # development_by_complexity:
+  #   low:
+  #     effort: low
 
 providers:
   claude:
@@ -12,17 +26,39 @@ providers:
     agents_dir: "~/.claude/agents"
     project_agents_dir: ".claude/agents"
     compatibility: "Claude Code or Cowork (needs Task-tool subagents to run separate generative/adversarial context windows)"
-    # {name} is replaced with the agent/subagent id when rendering
-    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}`"
+    # {name}, {model}, {effort} are filled when rendering spawn instructions
+    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}`, `model: {model}`, and `effort: {effort}`"
+    effort_key: effort
     environment_name: "Claude Code or Cowork"
 
   codex:
-    planning_model: gpt-5.6-Sol
-    development_model: gpt-5.6-Terra
-    review_model: gpt-5.6-Sol
+    # Sol plans and builds. Astra reviews, so Sol does not grade Sol.
+    # Low-complexity development steps down to Terra; review stays on Astra.
+    planning_model: gpt-6.1-sol
+    development_model: gpt-6.1-sol
+    review_model: gpt-6-astra
+    development_by_complexity:
+      low:
+        model: gpt-5.6-terra
     skills_dir: "~/.codex/skills"
     agents_dir: "~/.codex/agents"
     project_agents_dir: ".codex/agents"
     compatibility: "Codex (needs subagent support to run separate generative/adversarial context windows)"
-    subagent_invoke: "Spawn a subagent named `{name}` in a fresh context"
+    subagent_invoke: "Spawn a subagent named `{name}` in a fresh context with `model: {model}` and `model_reasoning_effort: {effort}`"
+    effort_key: model_reasoning_effort
     environment_name: "Codex"
+
+  cursor:
+    # No effort dial. Composer plans and builds; Grok is the critic at every complexity.
+    # readonly is off: Cursor's readonly flag can block the Bash these agents use for
+    # git diff and tests. The tool list already omits Write/Edit for critics.
+    planning_model: composer-2.5-fast
+    development_model: composer-2.5-fast
+    review_model: grok-4.7-high
+    skills_dir: "~/.cursor/skills"
+    agents_dir: "~/.cursor/agents"
+    project_agents_dir: ".cursor/agents"
+    compatibility: "Cursor (needs Task-tool subagents to run separate generative/adversarial context windows)"
+    subagent_invoke: "Invoke the Task tool with `subagent_type: {name}` and `model: {model}`"
+    environment_name: "Cursor"
+    readonly_subagents: false

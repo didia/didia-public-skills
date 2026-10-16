@@ -1,14 +1,15 @@
 ---
 name: develop-review
-description: Implements a coding task and loops a GPT 5.6 Terra developer against a GPT 5.6 Sol reviewer — reviewing the real diff, not the developer's summary — applying targeted fixes until the reviewer signs off, then opens a pull request. Use this whenever the user wants something built, implemented, or fixed with real cross-model code review before it's considered done, wants a second model to review a diff or catch what the first one missed, mentions "develop-review", or hands over an already-approved plan to be built. Also use it as the implementation half of the plan-develop pipeline. Requires an environment with subagents (Codex), a git repo, and the gh CLI.
+description: Implements a coding task and loops a GPT 6.1 Sol developer against a GPT 6 Astra reviewer — reviewing the real diff, not the developer's summary — applying targeted fixes until the reviewer signs off, then opens a pull request. Use this whenever the user wants something built, implemented, or fixed with real cross-model code review before it's considered done, wants a second model to review a diff or catch what the first one missed, mentions "develop-review", or hands over an already-approved plan to be built. Also use it as the implementation half of the plan-develop pipeline. Requires an environment with subagents (Codex), a git repo, and the gh CLI.
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), a git repository so the reviewer can read the real diff, and the gh CLI authenticated for opening pull requests.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
 # Develop-Review
 
 A bounded two-model loop that turns an approved plan (or a well-scoped task) into reviewed
-code: **develop (GPT 5.6 Terra) → review (GPT 5.6 Sol) → fix → …** until the reviewer approves or the
-cap is hit.
+code: **develop → review → fix → …** until the reviewer approves or the
+cap is hit. Model and effort for each spawn follow the plan's **Complexity** rating
+(`low` / `medium` / `high`). See `references/complexity-rubric.md`.
 
 ## Why this shape
 
@@ -36,15 +37,16 @@ Check before starting, and say plainly if something is missing rather than half-
   the full develop/review loop — just hand back a pushed branch at the end instead of
   opening a PR, and say so up front rather than at the end.
 - An environment with subagents. **In a plain chat interface with no subagent
-  capability you cannot get a genuinely independent GPT 5.6 Sol review** — say so, and offer to
+  capability you cannot get a genuinely independent GPT 6 Astra review** — say so, and offer to
   run the two stages sequentially yourself, switching hats explicitly, as a weaker
   substitute.
 
 ## Setup: install the two subagents (once)
 
-This skill bundles two subagent definitions in `agents/`. Each pins its model in
-frontmatter (`model: gpt-5.6-Terra` or `model: gpt-5.6-Sol`) so the right model runs
-regardless of what the main session is using.
+This skill bundles two subagent definitions in `agents/`. Each pins a default model in
+frontmatter (`model: gpt-6.1-sol` or `model: gpt-6-astra`). Effort (and
+any per-complexity model override) is passed on each spawn so it can follow the plan's
+Complexity rating.
 
 Check whether `develop-review-developer` and `develop-review-reviewer` are already
 available. If not, copy both from this skill's `agents/` directory into either:
@@ -55,31 +57,60 @@ available. If not, copy both from this skill's `agents/` directory into either:
 
 The two agents:
 
-- `develop-review-developer.md` — GPT 5.6 Terra, writes the code and applies fixes.
-- `develop-review-reviewer.md` — GPT 5.6 Sol, reviews the diff.
+- `develop-review-developer.toml` — writes the code and applies fixes.
+- `develop-review-reviewer.toml` — reviews the diff. A different model from the developer.
+
+## Effort routing by Complexity
+
+Read the approved plan's **Complexity** line (`low` / `medium` / `high`). Spawn the
+developer and reviewer from that row. Pass only the arguments written in that row.
+
+You may **raise** the rating during the run when the work turns out heavier than the plan
+said (auth, money, migrations, concurrency, a public API). Use the new row for every
+spawn after that. Never lower the rating. The reviewer's effort is already floored, so a
+`low` row does not put the critic on low effort when this provider has an effort dial.
+
+| Complexity | Developer spawn | Reviewer spawn |
+|---|---|---|
+| low | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-5.6-terra` and `model_reasoning_effort: low` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: medium` |
+| medium | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: medium` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: medium` |
+| high | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: high` |
+
+Resolved defaults for this provider (config may override any cell):
+
+
+| Complexity | Developer model | Developer effort | Reviewer model | Reviewer effort |
+|---|---|---|---|---|
+| low | GPT 5.6 Terra (`gpt-5.6-terra`) | low | GPT 6 Astra (`gpt-6-astra`) | medium |
+| medium | GPT 6.1 Sol (`gpt-6.1-sol`) | medium | GPT 6 Astra (`gpt-6-astra`) | medium |
+| high | GPT 6.1 Sol (`gpt-6.1-sol`) | high | GPT 6 Astra (`gpt-6-astra`) | high |
+
 
 ## Step 0: Establish what's being built
 
 You need something concrete enough to implement against. That's either:
 
 - **An approved plan** — from `plan-review`, or written by the user. Use it as given.
+  Extract its **Complexity** rating. If the plan has no Complexity line, classify once
+  using `references/complexity-rubric.md`, record the rating, and proceed.
 - **A direct task** — if the user hands you a task with no plan, that's fine for small,
-  well-understood changes. But if the task is large or the right approach is genuinely
+  well-understood changes. Classify Complexity once with the rubric before the first
+  spawn and record it. If the task is large or the right approach is genuinely
   unclear, say so and suggest running `plan-review` first: an unreviewed approach tends to
   turn the fix loop into a redesign loop, which is the expensive way to discover it.
 
 Confirm which branch the work belongs on before any code is written.
 
-## Step 1: Develop (GPT 5.6 Terra)
+## Step 1: Develop
 
-Spawn a subagent named `develop-review-developer` in a fresh context in **build mode**.
+Using the Complexity row from Step 0, spawn the developer in **build mode**.
 Give it the plan or task, plus any constraints the user stated. It writes the code,
 follows existing conventions in the repo, runs whatever tests and linters already exist,
 and reports what it changed file by file and what it ran.
 
-## Step 2: Review (GPT 5.6 Sol)
+## Step 2: Review
 
-Spawn a subagent named `develop-review-reviewer` in a fresh context with:
+Using the same Complexity row, spawn the reviewer with:
 
 - the plan or task it's supposed to satisfy,
 - the actual diff (`git diff`) — the reviewer also runs `git diff` itself, so it isn't
@@ -92,7 +123,7 @@ exactly one line: `IMPLEMENTATION_APPROVED` or `NEEDS_FIXES: <numbered, specific
 ## Step 3: Fix loop
 
 - **Approved** → go to Step 4.
-- **Needs fixes** → Spawn a subagent named `develop-review-developer` in a fresh context again in **fix mode** with the
+- **Needs fixes** → spawn the developer again (same Complexity row) in **fix mode** with the
   numbered feedback verbatim, asking for targeted fixes rather than a rewrite → back to
   Step 2. **Cap: 5 fix/review cycles.**
 
@@ -116,9 +147,10 @@ show the branch or diff first. The user reviews at the PR level, not before it e
 3. `gh pr create --base <target-branch> --head <branch> --title "<title>" --body "<body>"`.
    Use whatever base branch this work was actually branched from (`dev`, if this was
    invoked from `plan-develop`; otherwise whatever the user confirmed in Step 0). In the
-   body, briefly note it went through the develop-review loop and how many fix cycles it
-   took — a first-pass approval and a fifth-round approval mean different things to a
-   human reviewer, and that's useful signal for whoever picks up the review.
+   body, briefly note it went through the develop-review loop, how many fix cycles it
+   took, and the **Complexity** rating used for the spawn — a first-pass approval and a
+   fifth-round approval mean different things to a human reviewer, and that's useful
+   signal for whoever picks up the review.
 
 Share the PR link and stop. Don't merge it yourself — that decision stays with the human
 review on the PR.

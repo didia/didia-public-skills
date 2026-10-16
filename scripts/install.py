@@ -29,6 +29,15 @@ SKILL_AGENTS: dict[str, list[str]] = {
     ],
     "plan-develop": [],
     "pr-review": [],
+    "stack-develop": [],
+    "stack-review": [],
+}
+
+# Skills that need sibling skills installed on the same harness
+SKILL_DEPS: dict[str, list[str]] = {
+    "plan-develop": ["plan-review", "develop-review"],
+    "stack-develop": ["develop-review"],
+    "stack-review": ["pr-review"],
 }
 
 
@@ -94,9 +103,11 @@ def copy_agents(
     src_agents = ROOT / provider / "agents"
     for name in agent_names:
         src = src_agents / name
+        if provider == "codex":
+            src = src.with_suffix(".toml")
         if not src.is_file():
             raise SystemExit(f"Missing agent file: {src}")
-        dest = dest_agents / name
+        dest = dest_agents / src.name
         print(f"  agent  {src.relative_to(ROOT)} → {dest}")
         if dry_run:
             continue
@@ -142,14 +153,16 @@ def install_provider(
 
     copy_agents(provider, unique_agents, agents_dir, dry_run)
 
-    if "plan-develop" in skills:
-        missing = [s for s in ("plan-review", "develop-review") if s not in skills]
-        # Only warn when doing a partial install that omitted the deps
-        all_available = set(available_skills(provider))
-        if missing and set(skills) != all_available:
-            print(
-                f"  note: plan-develop needs {', '.join(missing)} installed as well"
-            )
+    all_available = set(available_skills(provider))
+    # Warn on partial installs that omit sibling deps
+    if set(skills) != all_available:
+        for skill in skills:
+            deps = SKILL_DEPS.get(skill, [])
+            missing = [d for d in deps if d not in skills]
+            if missing:
+                print(
+                    f"  note: {skill} needs {', '.join(missing)} installed as well"
+                )
 
 
 def parse_args() -> argparse.Namespace:
@@ -163,6 +176,7 @@ examples:
   python scripts/install.py --provider codex --skill plan-review
   python scripts/install.py --provider claude plan-review develop-review
   python scripts/install.py --provider all --skill pr-review --dry-run
+  python scripts/install.py --provider cursor
   python scripts/install.py --provider claude --project
 """.strip(),
     )
@@ -174,7 +188,7 @@ examples:
     )
     p.add_argument(
         "--provider",
-        choices=["claude", "codex", "all"],
+        choices=["claude", "codex", "cursor", "all"],
         default="all",
         help="Which provider tree(s) to install (default: all)",
     )
