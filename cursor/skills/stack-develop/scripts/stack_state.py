@@ -14,6 +14,7 @@ payload.json:
       "stack_id": "optional-filter",
       "slices_remaining": 1,
       "max_unreviewed_ahead": 2,
+      "land": "progressive",
       "trusted_reviewers": ["reviewer-login"],
       "trusted_developers": ["developer-login"],
       "prs": [
@@ -41,8 +42,13 @@ payload.json:
 
 Include merged and closed parent PRs. A missing parent is an incomplete payload.
 
-develop actions: retarget, sync, address, merge, promote, continue, idle, stop
+develop actions: rebase, address, merge, label, continue, idle, stop
 review actions: review, idle, stop
+
+land is progressive (default) or atomic. progressive merges the longest ready
+prefix with `gh stack merge <through>`. atomic merges the top only when every
+open PR is ready and slices_remaining is 0. A harness-rebase comment carries a
+review or fix onto a new head when the layer diff did not change.
 """
 
 from __future__ import annotations
@@ -59,10 +65,12 @@ REVIEW_RE = re.compile(
     r"(approved|changes-requested)\s+head:\s*(\S+)\s*-->"
 )
 FIX_RE = re.compile(r"<!-- harness-fix\s+round:\s*(\d+)\s+head:\s*(\S+)\s*-->")
+REBASE_RE = re.compile(r"<!-- harness-rebase\s+from:\s*(\S+)\s+head:\s*(\S+)\s*-->")
 
 BLOCKING_LABELS = {"harness:syncing", "harness:addressing-review"}
 SUBMITTED_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
-REMOVE_ON_PROMOTE = [
+LAND_MODES = {"progressive", "atomic"}
+REMOVE_ON_LABEL = [
     "harness:stacked",
     "harness:syncing",
     "harness:addressing-review",
@@ -136,6 +144,16 @@ def _fixes(pr: dict[str, Any], trusted: set[str]) -> list[dict[str, Any]]:
     return found
 
 
+def _rebases(pr: dict[str, Any], trusted: set[str]) -> list[dict[str, str]]:
+    found = []
+    for comment in pr.get("comments") or []:
+        if _login(comment) not in trusted:
+            continue
+        for match in REBASE_RE.finditer(comment.get("body") or ""):
+            found.append({"from": match.group(1), "head": match.group(2)})
+    return found
+
+
 def _labels(pr: dict[str, Any]) -> set[str]:
     labels = pr.get("labels") or []
     names = set()
@@ -173,8 +191,10 @@ def _normalize(
                 "index": int(fields.get("stack-index") or 0),
                 "parent": int(parent) if parent else None,
                 "max_rounds": int(fields.get("max-rounds") or 2),
+                "land": fields.get("land") or "progressive",
                 "reviews": _reviews(pr, reviewers),
                 "fixes": _fixes(pr, developers),
+                "rebases": _rebases(pr, developers),
             }
         )
     return sorted(rows, key=lambda row: row["index"])
@@ -227,29 +247,160 @@ def _fixes_for(row: dict[str, Any], round_n: int) -> list[dict[str, Any]]:
     return [fix for fix in row["fixes"] if fix["round"] == round_n]
 
 
-def _merge_head(row: dict[str, Any]) -> str | None:
+def _covers_live_head(row: dict[str, Any], sha: str) -> bool:
+    live = row["head"]
+    if not sha or not live:
+        return False
+    seen: set[str] = set()
+    frontier = [sha]
+    while frontier:
+        current = frontier.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        if current == live:
+            return True
+        for edge in row["rebases"]:
+            if edge["from"] == current:
+                frontier.append(edge["head"])
+    return False
+
+
+def _verdict_covers(row: dict[str, Any]) -> bool:
     if not row["reviews"] or not row["head"]:
-        return None
+        return False
     latest = row["reviews"][-1]
-    if latest["verdict"] == "approved" and latest["head"] == row["head"]:
-        return row["head"]
-    if (
+    if latest["verdict"] == "approved" and _covers_live_head(row, latest["head"]):
+        return True
+    return (
         latest["verdict"] == "changes-requested"
         and len(row["reviews"]) >= row["max_rounds"]
-        and any(fix["head"] == row["head"] for fix in _fixes_for(row, latest["round"]))
-    ):
-        return row["head"]
-    return None
+        and any(
+            _covers_live_head(row, fix["head"]) for fix in _fixes_for(row, latest["round"])
+        )
+    )
 
 
-def _promote(row: dict[str, Any]) -> dict[str, Any]:
+def _ready(row: dict[str, Any], by_num: dict[int, dict[str, Any]], trunk: str) -> bool:
+    if row["labels"] & BLOCKING_LABELS:
+        return False
+    if row["mergeable"] != "MERGEABLE":
+        return False
+    if row["base"] != _expected_base(row, by_num, trunk):
+        return False
+    return _verdict_covers(row)
+
+
+def _needs_address(row: dict[str, Any]) -> bool:
+    if not row["reviews"]:
+        return False
+    latest = row["reviews"][-1]
+    return latest["verdict"] == "changes-requested" and not _fixes_for(row, latest["round"])
+
+
+def _fix_mismatch(row: dict[str, Any]) -> bool:
+    if not row["reviews"]:
+        return False
+    latest = row["reviews"][-1]
+    if latest["verdict"] != "changes-requested":
+        return False
+    fixes = _fixes_for(row, latest["round"])
+    if not fixes:
+        return False
+    return not any(_covers_live_head(row, fix["head"]) for fix in fixes)
+
+
+def _stale_exhausted(row: dict[str, Any]) -> bool:
+    if not row["reviews"] or not row["head"]:
+        return False
+    if len(row["reviews"]) < row["max_rounds"]:
+        return False
+    return not _verdict_covers(row)
+
+
+def _needs_review(row: dict[str, Any]) -> bool:
+    if row["labels"] & BLOCKING_LABELS or _needs_address(row) or _fix_mismatch(row):
+        return False
+    if _verdict_covers(row) or _stale_exhausted(row):
+        return False
+    if any(_covers_live_head(row, review["head"]) for review in row["reviews"]):
+        return False
+    return len(row["reviews"]) < row["max_rounds"]
+
+
+def _broken(row: dict[str, Any], by_num: dict[int, dict[str, Any]], trunk: str) -> bool:
+    return (
+        row["base"] != _expected_base(row, by_num, trunk)
+        or row["mergeable"] == "CONFLICTING"
+    )
+
+
+def _land_mode(open_rows: list[dict[str, Any]]) -> tuple[str | None, dict[str, Any] | None]:
+    modes = {row["land"] for row in open_rows}
+    if len(modes) != 1:
+        return None, {
+            "action": "stop",
+            "reason": (
+                "open PRs disagree on land ("
+                + ", ".join(sorted(modes))
+                + "). Stamp the same land value on every open PR."
+            ),
+        }
+    mode = modes.pop()
+    if mode not in LAND_MODES:
+        return None, {
+            "action": "stop",
+            "reason": f"land must be progressive or atomic, got {mode!r}",
+        }
+    return mode, None
+
+
+def _merge_action(mode: str, group: list[dict[str, Any]]) -> dict[str, Any]:
+    through = group[-1]["number"]
+    numbers = ", ".join(str(row["number"]) for row in group)
+    if mode == "atomic":
+        reason = (
+            f"every open PR is ready and no slices remain; "
+            f"gh stack merge {through} --yes --merge lands PRs {numbers} or nothing. "
+            "Refetch and confirm each headRefOid still matches heads. Do not gh pr merge."
+        )
+    else:
+        reason = (
+            f"PRs {numbers} are a ready deployable prefix; "
+            f"gh stack merge {through} --yes --merge lands that prefix and leaves the rest open. "
+            "Refetch and confirm each headRefOid still matches heads. Do not gh pr merge."
+        )
     return {
-        "action": "promote",
+        "action": "merge",
+        "land": mode,
+        "through": through,
+        "prs": [row["number"] for row in group],
+        "heads": {str(row["number"]): row["head"] for row in group},
+        "reason": reason,
+    }
+
+
+def _label(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "action": "label",
         "pr": row["number"],
         "add_labels": ["harness:awaiting-review"],
-        "remove_labels": REMOVE_ON_PROMOTE,
+        "remove_labels": REMOVE_ON_LABEL,
+        "reason": "open layer is MERGEABLE and its live head has not been reviewed",
+    }
+
+
+def _rebase(row: dict[str, Any], expected: str) -> dict[str, Any]:
+    return {
+        "action": "rebase",
+        "pr": row["number"],
+        "base": expected,
         "reason": (
-            "bottom PR is MERGEABLE and is not labeled harness:awaiting-review"
+            f"PR {row['number']} is {row['mergeable'] or 'mis-based'} on {row['base']}; "
+            f"expected base {expected}. "
+            "Check out the stack, then gh stack rebase and gh stack push. "
+            "Do not gh pr edit --base and do not merge the base into the head. "
+            "Post a harness-rebase marker on a layer only when its range-diff is empty."
         ),
     }
 
@@ -306,37 +457,47 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
             }
         return {"action": "stop", "reason": "every stack PR is merged"}
 
+    mode, land_stop = _land_mode(open_rows)
+    if land_stop:
+        return land_stop
+
+    if any(row["labels"] & BLOCKING_LABELS for row in open_rows):
+        return {
+            "action": "idle",
+            "reason": (
+                "a PR is harness:syncing or harness:addressing-review; "
+                "finish that action and clear the label"
+            ),
+        }
+
+    prefix = []
     for row in open_rows:
-        expected = _expected_base(row, by_num, trunk)
-        if row["base"] != expected:
-            return {
-                "action": "retarget",
-                "pr": row["number"],
-                "base": expected,
-                "reason": (
-                    f"PR {row['number']} bases on {row['base']}; "
-                    f"set the base to {expected} with gh pr edit. "
-                    "Do not wait for GitHub to retarget after a merge."
-                ),
-            }
+        if not _ready(row, by_num, trunk):
+            break
+        prefix.append(row)
+    broken = next((row for row in open_rows if _broken(row, by_num, trunk)), None)
+    prefix_end = prefix[-1]["index"] if prefix else None
+
+    if mode == "progressive" and prefix and (broken is None or broken["index"] > prefix_end):
+        return _merge_action("progressive", prefix)
+    if (
+        mode == "atomic"
+        and slices_remaining == 0
+        and broken is None
+        and len(prefix) == len(open_rows)
+    ):
+        return _merge_action("atomic", open_rows)
+    if broken is not None:
+        return _rebase(broken, _expected_base(broken, by_num, trunk))
 
     for row in open_rows:
-        if row["mergeable"] == "CONFLICTING":
-            return {
-                "action": "sync",
-                "pr": row["number"],
-                "base": row["base"],
-                "reason": "mergeable is CONFLICTING; update the head onto its base",
-            }
-
-    bottom = open_rows[0]
-    latest = bottom["reviews"][-1] if bottom["reviews"] else None
-    if latest and latest["verdict"] == "changes-requested":
-        round_fixes = _fixes_for(bottom, latest["round"])
-        if not round_fixes:
+        if _ready(row, by_num, trunk):
+            continue
+        if _needs_address(row):
+            latest = row["reviews"][-1]
             return {
                 "action": "address",
-                "pr": bottom["number"],
+                "pr": row["number"],
                 "round": latest["round"],
                 "verdict": latest["verdict"],
                 "reviewed_head": latest["head"],
@@ -346,49 +507,30 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
                     "the current head"
                 ),
             }
-        if not any(fix["head"] == bottom["head"] for fix in round_fixes):
+        if _fix_mismatch(row):
             return {
                 "action": "idle",
                 "reason": (
                     "a harness-fix exists for the latest round but its head does not "
-                    "match the live head; post a harness-fix for the current head"
+                    "match the live head; post a harness-fix for the current head "
+                    "or a harness-rebase marker when the diff is unchanged"
                 ),
             }
-
-    merge_head = _merge_head(bottom)
-    if merge_head:
-        return {
-            "action": "merge",
-            "pr": bottom["number"],
-            "head": merge_head,
-            "reason": (
-                "approval or the capped fix matches the live head; "
-                "merge with gh pr merge --match-head-commit"
-            ),
-        }
-
-    if (
-        latest
-        and latest["verdict"] == "approved"
-        and latest["head"] != bottom["head"]
-        and len(bottom["reviews"]) >= bottom["max_rounds"]
-    ):
-        return {
-            "action": "stop",
-            "reason": (
-                "the live head moved after the last allowed review; "
-                "refusing to merge code the reviewer did not approve"
-            ),
-        }
-
-    if bottom["mergeable"] != "MERGEABLE":
-        return {
-            "action": "idle",
-            "reason": "bottom mergeability is not MERGEABLE yet; refetch before promoting",
-        }
-
-    if "harness:awaiting-review" not in bottom["labels"]:
-        return _promote(bottom)
+        if _stale_exhausted(row):
+            return {
+                "action": "stop",
+                "reason": (
+                    f"PR {row['number']} used its review cap and the live head is not "
+                    "covered by that review; refusing to merge code the reviewer did not approve"
+                ),
+            }
+        if row["mergeable"] != "MERGEABLE":
+            return {
+                "action": "idle",
+                "reason": f"PR {row['number']} mergeability is not MERGEABLE yet; refetch",
+            }
+        if _needs_review(row) and "harness:awaiting-review" not in row["labels"]:
+            return _label(row)
 
     unreviewed_above = [row for row in open_rows[1:] if not row["reviews"]]
     if slices_remaining > 0 and len(unreviewed_above) < ahead_cap:
@@ -398,6 +540,7 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
             "parent_pr": parent["number"],
             "base_branch": parent["head_name"],
             "next_index": parent["index"] + 1,
+            "land": mode,
             "reason": "fewer than the cap of unreviewed PRs sit above the bottom",
         }
 
@@ -409,7 +552,7 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
                 f"cap is {ahead_cap}"
             ),
         }
-    return {"action": "idle", "reason": "nothing to retarget, sync, address, merge, or promote"}
+    return {"action": "idle", "reason": "nothing to rebase, address, merge, or label"}
 
 
 def decide_review(payload: dict[str, Any]) -> dict[str, Any]:
@@ -424,39 +567,35 @@ def decide_review(payload: dict[str, Any]) -> dict[str, Any]:
     by_num = _by_number(rows)
     trunk = payload.get("trunk") or "main"
     for row in _open_rows(rows):
-        parent = by_num.get(row["parent"]) if row["parent"] else None
-        if parent is not None and parent["state"] != "MERGED":
-            continue
         if "harness:awaiting-review" not in row["labels"]:
             continue
         if row["labels"] & BLOCKING_LABELS:
             continue
         if row["mergeable"] != "MERGEABLE":
             continue
-        if any(review["head"] == row["head"] for review in row["reviews"]):
+        if row["base"] != _expected_base(row, by_num, trunk):
+            continue
+        if any(_covers_live_head(row, review["head"]) for review in row["reviews"]):
             continue
         if len(row["reviews"]) >= row["max_rounds"]:
             continue
         if row["reviews"]:
             latest = row["reviews"][-1]
             if latest["verdict"] == "changes-requested" and not any(
-                fix["head"] == row["head"] for fix in _fixes_for(row, latest["round"])
+                _covers_live_head(row, fix["head"]) for fix in _fixes_for(row, latest["round"])
             ):
                 continue
-        expected = _expected_base(row, by_num, trunk)
-        if row["base"] != expected:
-            continue
         return {
             "action": "review",
             "pr": row["number"],
             "round": len(row["reviews"]) + 1,
             "head": row["head"],
             "max_rounds": row["max_rounds"],
-            "reason": "bottom PR is awaiting review on a head that has not been reviewed",
+            "reason": "layer is awaiting review on a head that has not been reviewed",
         }
     if not _open_rows(rows):
         return {"action": "stop", "reason": "no open stack PRs"}
-    return {"action": "idle", "reason": "no eligible bottom PR"}
+    return {"action": "idle", "reason": "no eligible layer"}
 
 
 def decide(role: str, payload: dict[str, Any]) -> dict[str, Any]:

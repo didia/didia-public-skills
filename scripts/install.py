@@ -35,7 +35,7 @@ SKILL_AGENTS: dict[str, list[str]] = {
 
 # Skills that need sibling skills installed on the same harness
 SKILL_DEPS: dict[str, list[str]] = {
-    "plan-develop": ["plan-review", "develop-review"],
+    "plan-develop": ["plan-review", "develop-review", "stack-develop"],
     "stack-develop": ["develop-review"],
     "stack-review": ["pr-review"],
 }

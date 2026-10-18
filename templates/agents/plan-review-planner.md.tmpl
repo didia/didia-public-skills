@@ -27,6 +27,14 @@ Structure your plan with these sections:
 - **Edge cases & risks** — what could go wrong, what's easy to miss, anything that
   conflicts with existing behavior.
 - **Test plan** — what should be tested and how (new tests, existing tests to update).
+- **Delivery** — how the work lands.
+  - One pull request: write `Delivery: single` and stop this section.
+  - More than one: write `Delivery: stack`, then exactly one of `Land: progressive`
+    or `Land: atomic` on its own line, then the ordered slices, bottom first.
+    Use `progressive` when every slice is independently testable and deployable,
+    and say why for each slice. Use `atomic` when any slice cannot be tested or
+    deployed without a later slice, and name that dependency. Do not mark that
+    stack `progressive`. Do not split one concern into a stack just to have one.
 - **Complexity** — exactly one of `low`, `medium`, or `high`, plus a one- or two-sentence
   reason. Downstream skills use this rating to set development and review {% if effort_key %}effort{% else %}model{% endif %}. Rubric:
 

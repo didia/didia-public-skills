@@ -1,6 +1,6 @@
 ---
 name: stack-develop
-description: Use when the user says you are the developer in a cross-harness review, asks to drive a stack of PRs while another harness reviews, mentions "stack-develop", stacked PRs with an external reviewer, or wants to keep opening child PRs while waiting for review comments on earlier ones. Also use when they hand an ordered list of existing PRs to adopt as a stack, or a larger task to slice into stacked PRs. Requires develop-review installed on this harness, git, and the gh CLI.
+description: Use when the user says you are the developer in a cross-harness review, asks to drive a stack of PRs while another harness reviews, mentions "stack-develop", stacked PRs with an external reviewer, or wants to keep opening child PRs while waiting for review comments on earlier ones. Also use when they hand an ordered list of existing PRs to adopt as a stack, a larger task to slice into stacked PRs, or they want the stack to land progressively or all at once (`land: atomic`). Requires develop-review installed on this harness, git, the gh CLI, and the gh-stack extension.
 compatibility: Codex (needs subagent support to run separate generative/adversarial context windows), develop-review installed alongside this skill, a git repository, and the gh CLI authenticated for opening and merging pull requests.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
@@ -20,6 +20,8 @@ Check up front and say what is missing:
 - **`develop-review`** at `~/.codex/skills/develop-review/SKILL.md` (or the
   project install path). This skill does nothing useful without it.
 - **git** and an authenticated **`gh`** (`gh auth status`).
+- The **gh-stack** extension (`gh extension install github/gh-stack`, then
+  `gh stack --help`). Stacks stay in one repository; forks cannot join one.
 - Subagents as required by `develop-review`.
 
 ## Configuration
@@ -34,6 +36,13 @@ Check up front and say what is missing:
 - **`trusted_reviewers` / `trusted_developers`** — GitHub logins. Ask once if
   the user did not name them. The state script ignores review and fix markers
   from any other account, and it ignores pending or dismissed reviews.
+- **`land`** — `progressive` (default) or `atomic`. Write it on the stack issue
+  and every PR marker. `progressive` lands a ready prefix while later PRs stay
+  open; each slice must be independently testable and deployable. `atomic`
+  lands the whole open stack in one merge once every layer is ready and no
+  planned slice is left. Use `atomic` when the user asks for all-or-nothing,
+  or when a slice cannot ship without a later slice. Do not flip the mode
+  because the top PR is still open.
 
 ## Step 0: Establish the stack
 
@@ -43,19 +52,25 @@ When the user passes an ordered list of PR URLs/numbers:
 
 1. Verify each PR's `baseRefName` is the previous PR's `headRefName` (first base
    is trunk). Stop and say so if the chain is wrong.
-2. Ensure the four `harness:*` labels exist.
-3. Stamp or update the `harness-stack` marker on each body (`stack-index`,
-   `stack-parent`, shared `stack-id`, `max-rounds`).
-4. Label the bottom `harness:awaiting-review` only if `mergeable` is
-   `MERGEABLE`; label every open PR above it `harness:stacked`.
-5. Do **not** reimplement those PRs. Enter the main loop.
+2. Link them into a GitHub stack, bottom to top: `gh stack link <pr> <pr> ...`.
+3. Ensure the four `harness:*` labels exist.
+4. Stamp or update the `harness-stack` marker on each body (`stack-index`,
+   `stack-parent`, shared `stack-id`, `max-rounds`, `land`).
+5. Label every open `MERGEABLE` PR `harness:awaiting-review`. Do not leave
+   upper PRs labeled only `harness:stacked`.
+6. Do **not** reimplement those PRs. Enter the main loop. `slices_remaining`
+   is 0 unless the user still has unopened slices.
 
 ### From scratch
 
-When the user passes a task (and optional round cap):
-
-1. Slice the task into an ordered list of PR-sized slices.
-2. Open a GitHub issue titled `stack: <slug>` with that list and `max-rounds`.
+1. Take the ordered slices and `land` from the task.
+   - Approved plan with `Delivery: stack`: use its slices and its
+     `Land: progressive` or `Land: atomic` line. Do not re-slice or change land.
+   - No such plan: slice the task into PR-sized slices. Under `progressive`,
+     each slice must be independently testable and deployable. If one cannot
+     ship alone, set `land: atomic` and say why.
+2. Open a GitHub issue titled `stack: <slug>` with that list, `max-rounds`,
+   and `land`.
 3. Ensure the four `harness:*` labels exist.
 4. Enter the main loop and implement slice 1 first (Continue priority).
 
@@ -64,7 +79,8 @@ When the user passes a task (and optional round cap):
 Fetch every stack PR, including merged and closed parents (`gh pr view` with
 `reviews` and `comments`, which include `author.login` and review `state`).
 Write the JSON payload documented in `scripts/stack_state.py`, including
-`trusted_reviewers` and `trusted_developers`, and run:
+`trusted_reviewers`, `trusted_developers`, and `slices_remaining` (planned
+slices that have no PR yet). Run:
 
 ```bash
 python3 scripts/stack_state.py develop payload.json
@@ -77,22 +93,24 @@ scheduled wakeup. Do not foreground-sleep.
 Exit when the script returns `stop`, or a blocking finding cannot be fixed —
 then tell the user.
 
-### retarget
+### rebase
 
-`gh pr edit <pr> --base <base>` using the `base` field. Then fetch again. Do
-not wait for GitHub to retarget children after a merge.
-
-### sync
-
-1. Set `harness:syncing` (remove `harness:awaiting-review` / `harness:stacked`).
-2. Merge the current base into the head and push. Use
-   `git push --force-with-lease` on that head branch only when a rebase is
-   required to drop commits already on trunk. Never force-push trunk.
-3. If the resolution changes behavior beyond taking one side of a conflict,
-   follow `develop-review` in **fix mode** and let its internal reviewer sign
-   off before clearing the label.
-4. Clear `harness:syncing` only after a successful push. Do not set
-   `harness:awaiting-review` until `mergeable` is `MERGEABLE`.
+1. Set `harness:syncing` on the named PR and clear `harness:awaiting-review`
+   on it.
+2. `gh stack checkout <pr>` when the stack is not checked out locally.
+3. Record each open layer's base and head SHA.
+4. `gh stack rebase`, then `gh stack push`. On a conflict, resolve it and
+   `gh stack rebase --continue`. When the resolution changes behavior beyond
+   taking one side, follow `develop-review` in **fix mode** on that layer
+   before continuing. Never force-push trunk. Do not `gh pr edit --base`. Do
+   not merge the base into the head.
+5. For each layer, run
+   `git range-diff <old-base>..<old-head> <new-base>..<new-head>`. When the
+   output is empty, post
+   `<!-- harness-rebase from: <old-head> head: <new-head> -->`. When it is not
+   empty, do not post that marker.
+6. Clear `harness:syncing` only after the push. Leave `harness:awaiting-review`
+   off until the script returns `label`.
 
 ### address
 
@@ -102,37 +120,47 @@ Only when the script says `address`. An `approved` verdict is not this action.
 2. Set `harness:addressing-review` (remove `harness:awaiting-review`).
 3. Read and follow `develop-review` in **fix mode** with the external comments.
 4. Skip `develop-review`'s "open a pull request" step; push to the existing head.
-5. Post a top-level comment with the `harness-fix` marker for that `round` and
-   the new head SHA.
-6. Clear `harness:addressing-review`. If rounds remain and the verdict was
+5. `gh stack rebase --upstack`, then `gh stack push`, so layers above pick up
+   the fix. Post `harness-rebase` on each upper layer whose range-diff is empty.
+6. Post a top-level comment with the `harness-fix` marker for that `round` and
+   the new head SHA of the layer you fixed.
+7. Clear `harness:addressing-review`. If rounds remain and the verdict was
    `changes-requested`, set `harness:awaiting-review` again.
 
 ### merge
 
+Refetch every PR in `prs`. If any `headRefOid` differs from `heads`, do not
+merge; ask the script again.
+
 ```bash
-gh pr merge <pr> --merge --match-head-commit <head>
+gh stack merge <through> --yes --merge
 ```
 
-Use the `head` field from the script. If the repo forbids merge commits, use
-squash/rebase as required and still pass `--match-head-commit`. After the
-merge, ask the script again — the child usually needs `retarget`, then maybe
-`sync`, then `promote`.
+`through` is the script field. That command lands `through` and every unmerged
+PR below it, and leaves PRs above it open. GitHub then rebases the remainder
+onto trunk. `land: progressive` does this for the ready prefix even when upper
+PRs are still in review. `land: atomic` does this for the top PR only when the
+script says the whole open stack is ready. If any PR in the group cannot merge,
+none do. If the repo rejects merge commits, rerun with `--squash` or
+`--rebase`. If GitHub says the PR is not in a stack, `gh stack link` the open
+chain bottom to top and run the same merge again. Do not `gh pr merge`.
 
-### promote
+### label
 
-Remove `remove_labels` and add `add_labels` on that PR. This is how a stacked
-child becomes `harness:awaiting-review` after its parent merges. Do it again
-when GitHub's mergeability was `UNKNOWN` and a later fetch says `MERGEABLE`.
+Remove `remove_labels` and add `add_labels` on that PR. This marks any open
+layer, not only the bottom, as `harness:awaiting-review`. Do it again when
+GitHub's mergeability was `UNKNOWN` and a later fetch says `MERGEABLE`.
 
 ### continue
 
-1. Create the next branch off `base_branch` from the script, at `next_index`
-   (index 1 only when the stack has no PRs yet).
-2. Read and follow `develop-review` for that slice. The branch and base already
-   exist. Skip its branch question and open the PR against that base.
-3. Stamp the `harness-stack` marker (`max-rounds` default 2).
-4. Label the bottom `harness:awaiting-review` only if `MERGEABLE`; label open
-   PRs above it `harness:stacked`.
+1. Create the next branch at `next_index`. When the stack has no branches yet,
+   `gh stack init --base <base_branch> <branch>`. Otherwise check out
+   `base_branch` and `gh stack add <branch>`.
+2. Read and follow `develop-review` for that slice. The branch already exists.
+   Skip its branch question and its "open a pull request" step.
+3. `gh stack submit --auto --open`.
+4. Stamp the `harness-stack` marker (`max-rounds` default 2, and `land`).
+5. Label that PR `harness:awaiting-review` when it is `MERGEABLE`.
 
 The script refuses `continue` when two unreviewed PRs already sit above the
 bottom. Adopted PRs are not reimplemented.
@@ -143,3 +171,7 @@ bottom. Adopted PRs are not reimplemented.
 - Do not raise `max-rounds` or invent a second review procedure.
 - Do not spawn `stack-review`; the other harness runs that skill.
 - Do not merge past unfixed Critical/High findings.
+- Do not `gh pr merge`, and do not `gh pr edit --base`.
+- Do not hold a `progressive` prefix because a PR above it is still open.
+- Do not merge an `atomic` stack until the script returns `merge`.
+- Do not post `harness-rebase` when the layer's range-diff is non-empty.

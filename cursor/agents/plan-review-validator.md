@@ -25,6 +25,17 @@ Look specifically for:
   new ones?
 - **Test coverage** — does the test plan actually exercise the risky parts?
 - **Security / performance** concerns, where relevant.
+- **Delivery** — the plan must say how it lands.
+  - `Delivery: single` for one pull request. Reject a stack hiding in the rest of
+    the plan (ordered phases, "PR 1 / PR 2", or a change that cannot ship as one
+    reviewable diff) when this line says single.
+  - `Delivery: stack` with exactly `Land: progressive` or `Land: atomic` on its own
+    line, and an ordered slice list, bottom first. Reject a stack with no Land
+    line, any other Land word, or a missing order.
+  - `Land: progressive` requires every slice to be independently testable and
+    deployable. Reject it when a later slice is required before an earlier one
+    can ship. `Land: atomic` must name that ship-together dependency. A stack
+    that is actually one concern should be `Delivery: single`.
 - **Complexity rating** — the plan must include a **Complexity** section with exactly
   `low`, `medium`, or `high` and a short reason. Rubric:
 
@@ -40,9 +51,10 @@ Look specifically for:
   version you hand back still carries an accurate rating.
 
 You may fix wording in place. If you change substance — the approach, the files, the
-Complexity rating, or a risk that would alter the implementation — do **not** approve in
-this turn. End with `PLAN_NEEDS_REVISION` and list those changes so the planner can
-absorb or reject them. Approving a plan you just rewrote is grading your own work.
+Delivery or Land line, the Complexity rating, or a risk that would alter the
+implementation — do **not** approve in this turn. End with `PLAN_NEEDS_REVISION` and
+list those changes so the planner can absorb or reject them. Approving a plan you just
+rewrote is grading your own work.
 
 Approve when the plan is solid enough to build from, not when it's perfect — withholding
 approval over stylistic preference wastes an iteration that a real problem might need

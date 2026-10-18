@@ -8,10 +8,10 @@ Workflows:
 |---|---|
 | `plan-review` | Bounded plan → validate loop (no code) |
 | `develop-review` | Bounded develop → review loop, then open a PR |
-| `plan-develop` | Orchestrator: branch → plan-review → develop-review → PR |
+| `plan-develop` | Orchestrator: plan-review, then one PR or a stack (`Land: progressive` or `atomic`) |
 | `pr-review` | Deep GitHub PR review with inline comments |
 | `stack-develop` | Cross-harness developer: stack PRs via develop-review, merge, sync |
-| `stack-review` | Cross-harness reviewer: eligible stack bottom via pr-review |
+| `stack-review` | Cross-harness reviewer: every eligible stack layer via pr-review |
 
 Templates live under `templates/`. Generated trees are committed at `claude/`, `codex/`, and `cursor/`. **Edit templates and `config.yaml`, not the generated files.**
 
@@ -46,7 +46,7 @@ Planning always runs at `planning_effort` (default `high`) on providers that sup
 
 `trunk` (default `dev`) is the branch `plan-develop` uses. Codex agents are generated as `.toml` (`name`, `description`, `model`, optional `model_reasoning_effort`, `developer_instructions`). Cursor `readonly_subagents` is false so planner, validator, and reviewer can still run git and tests; their tool lists omit Write and Edit.
 
-`stack-develop` and `stack-review` call `scripts/stack_state.py` for the next action (retarget, sync, address, merge, continue, review). The script caps unreviewed PRs above the stack bottom at two. Poll with `/loop` or a scheduled wakeup.
+`stack-develop` and `stack-review` call `scripts/stack_state.py` for the next action (rebase, address, merge, label, continue, review). Default `land: progressive` merges a ready prefix with `gh stack merge` while upper layers stay open. `land: atomic` merges the whole open stack once every layer is ready. The script caps unreviewed PRs above the stack bottom at two, and those PRs are still reviewable. Poll with `/loop` or a scheduled wakeup.
 
 Optional label overrides per provider: `planning_model_label`, `development_model_label`, `review_model_label`.
 
