@@ -81,6 +81,7 @@ Under `land: atomic` nothing lands until every open layer is ready.
 - Do not skip a layer because it is not the bottom, because its parent is still
   open, or because it is labeled `harness:stacked`.
 - Do not review conflicting PRs, PRs whose base is stale, or PRs still labeled
-  `harness:syncing` / `harness:addressing-review`.
+  `harness:syncing` / `harness:addressing-review`. Do not review a layer while
+  any ancestor is labeled `harness:syncing` or `harness:addressing-review`.
 - Do not raise `max-rounds` or invent a second review procedure.
 - Do not spawn `stack-develop`; the other harness runs that skill.

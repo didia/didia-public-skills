@@ -95,8 +95,8 @@ then tell the user.
 
 ### rebase
 
-1. Set `harness:syncing` on the named PR and clear `harness:awaiting-review`
-   on it.
+1. Set `harness:syncing` on every PR in `sync_prs` and clear
+   `harness:awaiting-review` on those PRs. The rebase rewrites the whole stack.
 2. `gh stack checkout <pr>` when the stack is not checked out locally.
 3. Record each open layer's base and head SHA.
 4. `gh stack rebase`, then `gh stack push`. On a conflict, resolve it and
@@ -105,10 +105,12 @@ then tell the user.
    before continuing. Never force-push trunk. Do not `gh pr edit --base`. Do
    not merge the base into the head.
 5. For each layer, run
-   `git range-diff <old-base>..<old-head> <new-base>..<new-head>`. When the
-   output is empty, post
-   `<!-- harness-rebase from: <old-head> head: <new-head> -->`. When it is not
-   empty, do not post that marker.
+   `git -c color.ui=never range-diff <old-base>..<old-head> <new-base>..<new-head>`
+   and pass that output to `python3 scripts/stack_state.py range-diff`. Post
+   `<!-- harness-rebase from: <old-head> head: <new-head> -->` only when it
+   prints `"unchanged": true`. That is every summary row using `=`, including
+   output that is only those rows. Do not post the marker when a row uses
+   `!`, `<`, or `>`, or when a diff hunk is present.
 6. Clear `harness:syncing` only after the push. Leave `harness:awaiting-review`
    off until the script returns `label`.
 
@@ -117,20 +119,27 @@ then tell the user.
 Only when the script says `address`. An `approved` verdict is not this action.
 
 1. Finish an in-progress `develop-review` first if one is mid-flight.
-2. Set `harness:addressing-review` (remove `harness:awaiting-review`).
+2. Set `harness:addressing-review` on that PR (remove `harness:awaiting-review`).
+   Set `harness:syncing` on every PR in `sync_prs` and clear
+   `harness:awaiting-review` there too. Those layers will be rewritten.
 3. Read and follow `develop-review` in **fix mode** with the external comments.
-4. Skip `develop-review`'s "open a pull request" step; push to the existing head.
+4. Commit any uncommitted changes on the layer you fixed. Skip
+   `develop-review`'s push and `gh pr create`, then push that layer's branch.
 5. `gh stack rebase --upstack`, then `gh stack push`, so layers above pick up
-   the fix. Post `harness-rebase` on each upper layer whose range-diff is empty.
+   the fix. Post `harness-rebase` on each upper layer only when
+   `stack_state.py range-diff` reports `"unchanged": true`.
 6. Post a top-level comment with the `harness-fix` marker for that `round` and
    the new head SHA of the layer you fixed.
-7. Clear `harness:addressing-review`. If rounds remain and the verdict was
-   `changes-requested`, set `harness:awaiting-review` again.
+7. Clear `harness:addressing-review` and `harness:syncing`. If rounds remain
+   and the verdict was `changes-requested`, set `harness:awaiting-review` on
+   the layer you fixed again.
 
 ### merge
 
 Refetch every PR in `prs`. If any `headRefOid` differs from `heads`, do not
 merge; ask the script again.
+
+When `via` is `stack`:
 
 ```bash
 gh stack merge <through> --yes --merge
@@ -142,8 +151,14 @@ onto trunk. `land: progressive` does this for the ready prefix even when upper
 PRs are still in review. `land: atomic` does this for the top PR only when the
 script says the whole open stack is ready. If any PR in the group cannot merge,
 none do. If the repo rejects merge commits, rerun with `--squash` or
-`--rebase`. If GitHub says the PR is not in a stack, `gh stack link` the open
-chain bottom to top and run the same merge again. Do not `gh pr merge`.
+`--rebase`. Do not `gh pr merge`.
+
+When `via` is `pr`, the payload has a single pull request, so GitHub will not
+form a stack. Merge that pull request with
+`gh pr merge <through> --merge --match-head-commit <head>` using the SHA in
+`heads`. Do not `gh stack merge` it. If `slices_remaining` is still positive,
+the script returns `continue` instead, so the next slice exists before the
+first stack merge.
 
 ### label
 
@@ -156,11 +171,14 @@ GitHub's mergeability was `UNKNOWN` and a later fetch says `MERGEABLE`.
 1. Create the next branch at `next_index`. When the stack has no branches yet,
    `gh stack init --base <base_branch> <branch>`. Otherwise check out
    `base_branch` and `gh stack add <branch>`.
-2. Read and follow `develop-review` for that slice. The branch already exists.
-   Skip its branch question and its "open a pull request" step.
-3. `gh stack submit --auto --open`.
-4. Stamp the `harness-stack` marker (`max-rounds` default 2, and `land`).
-5. Label that PR `harness:awaiting-review` when it is `MERGEABLE`.
+2. Read and follow `develop-review` for that slice through approval. The branch
+   already exists. Skip its branch question.
+3. Commit any uncommitted changes with a message describing the slice. That is
+   the commit step of `develop-review`'s "open a pull request" section. Skip
+   that section's push and `gh pr create`.
+4. `gh stack submit --auto --open`.
+5. Stamp the `harness-stack` marker (`max-rounds` default 2, and `land`).
+6. Label that PR `harness:awaiting-review` when it is `MERGEABLE`.
 
 The script refuses `continue` when two unreviewed PRs already sit above the
 bottom. Adopted PRs are not reimplemented.
@@ -171,7 +189,11 @@ bottom. Adopted PRs are not reimplemented.
 - Do not raise `max-rounds` or invent a second review procedure.
 - Do not spawn `stack-review`; the other harness runs that skill.
 - Do not merge past unfixed Critical/High findings.
-- Do not `gh pr merge`, and do not `gh pr edit --base`.
+- Do not `gh pr merge` unless the script sets `via` to `pr`. Do not
+  `gh pr edit --base`.
+- Do not `gh stack merge` the first slice while it is the only pull request
+  and another slice is still planned.
 - Do not hold a `progressive` prefix because a PR above it is still open.
 - Do not merge an `atomic` stack until the script returns `merge`.
-- Do not post `harness-rebase` when the layer's range-diff is non-empty.
+- Do not post `harness-rebase` unless `stack_state.py range-diff` reports
+  `"unchanged": true`.

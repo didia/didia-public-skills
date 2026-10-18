@@ -134,6 +134,7 @@ class DevelopTests(unittest.TestCase):
         )
         self.assertEqual(action["action"], "merge")
         self.assertEqual(action["land"], "progressive")
+        self.assertEqual(action["via"], "pr")
         self.assertEqual(action["through"], 1)
         self.assertEqual(action["prs"], [1])
         self.assertEqual(action["heads"], {"1": "abc"})
@@ -300,6 +301,7 @@ class DevelopTests(unittest.TestCase):
         )
         self.assertEqual(action["action"], "merge")
         self.assertEqual(action["land"], "progressive")
+        self.assertEqual(action["via"], "stack")
         self.assertEqual(action["through"], 2)
         self.assertEqual(action["prs"], [1, 2])
         self.assertEqual(action["heads"], {"1": "aaa", "2": "bbb"})
@@ -458,6 +460,49 @@ class DevelopTests(unittest.TestCase):
         )
         self.assertEqual(action["action"], "address")
         self.assertEqual(action["pr"], 2)
+        self.assertEqual(action["sync_prs"], [])
+
+    def test_ready_lone_pr_opens_next_slice_before_stack_merge(self):
+        action = stack_state.decide(
+            "develop",
+            payload(
+                [
+                    pr(
+                        1,
+                        1,
+                        head_name="a",
+                        head="aaa",
+                        reviews=[review(1, "approved", "aaa")],
+                    )
+                ],
+                slices_remaining=1,
+            ),
+        )
+        self.assertEqual(action["action"], "continue")
+        self.assertEqual(action["next_index"], 2)
+        self.assertEqual(action["base_branch"], "a")
+
+    def test_last_pr_of_an_existing_stack_uses_stack_merge(self):
+        action = stack_state.decide(
+            "develop",
+            payload(
+                [
+                    pr(1, 1, state="MERGED", head_name="a"),
+                    pr(
+                        2,
+                        2,
+                        parent="1",
+                        base="main",
+                        head_name="b",
+                        head="bbb",
+                        reviews=[review(1, "approved", "bbb")],
+                    ),
+                ]
+            ),
+        )
+        self.assertEqual(action["action"], "merge")
+        self.assertEqual(action["via"], "stack")
+        self.assertEqual(action["through"], 2)
 
 
 class ReviewTests(unittest.TestCase):
@@ -560,6 +605,50 @@ class ReviewTests(unittest.TestCase):
             ),
         )
         self.assertEqual(action["action"], "idle")
+
+    def test_skips_layer_while_an_ancestor_is_being_rewritten(self):
+        for label in ("harness:syncing", "harness:addressing-review"):
+            action = stack_state.decide(
+                "review",
+                payload(
+                    [
+                        pr(1, 1, head_name="a", labels=[label]),
+                        pr(
+                            2,
+                            2,
+                            parent="1",
+                            base="a",
+                            head_name="b",
+                            labels=["harness:awaiting-review"],
+                        ),
+                    ]
+                ),
+            )
+            self.assertEqual(action["action"], "idle", label)
+
+
+class RangeDiffTests(unittest.TestCase):
+    def test_unchanged_summary_rows_count_as_unchanged(self):
+        text = (
+            "1:  9d19f1b = 1:  abcdef0 Land stack prefixes\n"
+            "2:  1111111 = 2:  2222222 Second commit\n"
+        )
+        self.assertTrue(stack_state.range_diff_unchanged(text))
+        self.assertEqual(
+            stack_state.decide("range-diff", text),
+            {"unchanged": True},
+        )
+
+    def test_empty_output_is_unchanged(self):
+        self.assertTrue(stack_state.range_diff_unchanged(""))
+
+    def test_changed_added_or_removed_patches_are_not_unchanged(self):
+        changed = "1:  aaaaaaa ! 1:  bbbbbbb Reword\n    @@ -1 +1 @@\n"
+        added = "-:  ------- > 1:  ccccccc New commit\n"
+        removed = "1:  ddddddd < -:  ------- Dropped\n"
+        self.assertFalse(stack_state.range_diff_unchanged(changed))
+        self.assertFalse(stack_state.range_diff_unchanged(added))
+        self.assertFalse(stack_state.range_diff_unchanged(removed))
 
 
 if __name__ == "__main__":

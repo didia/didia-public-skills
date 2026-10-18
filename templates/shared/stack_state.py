@@ -66,6 +66,9 @@ REVIEW_RE = re.compile(
 )
 FIX_RE = re.compile(r"<!-- harness-fix\s+round:\s*(\d+)\s+head:\s*(\S+)\s*-->")
 REBASE_RE = re.compile(r"<!-- harness-rebase\s+from:\s*(\S+)\s+head:\s*(\S+)\s*-->")
+RANGE_DIFF_SUMMARY = re.compile(
+    r"^\s*(?:\d+|-):\s+\S+\s+(?P<op>[=!<>])\s+(?:\d+|-):"
+)
 
 BLOCKING_LABELS = {"harness:syncing", "harness:addressing-review"}
 SUBMITTED_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
@@ -355,10 +358,38 @@ def _land_mode(open_rows: list[dict[str, Any]]) -> tuple[str | None, dict[str, A
     return mode, None
 
 
-def _merge_action(mode: str, group: list[dict[str, Any]]) -> dict[str, Any]:
+def range_diff_unchanged(text: str) -> bool:
+    """True when git range-diff shows no added, removed, or changed patches.
+
+    An unchanged rebase prints one `old = new` summary row per commit. Empty
+    output is unchanged too. A `!`, `<`, or `>` summary, or a diff hunk under
+    a summary, is a changed layer.
+    """
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        match = RANGE_DIFF_SUMMARY.match(line)
+        if match is None or match.group("op") != "=":
+            return False
+    return True
+
+
+def _merge_via(rows: list[dict[str, Any]]) -> str:
+    return "stack" if len(rows) >= 2 else "pr"
+
+
+def _merge_action(mode: str, group: list[dict[str, Any]], via: str) -> dict[str, Any]:
     through = group[-1]["number"]
+    head = group[-1]["head"]
     numbers = ", ".join(str(row["number"]) for row in group)
-    if mode == "atomic":
+    if via == "pr":
+        reason = (
+            f"PR {through} is ready and is the only pull request in the payload, "
+            "so GitHub will not form a stack. "
+            f"gh pr merge {through} --merge --match-head-commit {head}. "
+            "Do not gh stack merge."
+        )
+    elif mode == "atomic":
         reason = (
             f"every open PR is ready and no slices remain; "
             f"gh stack merge {through} --yes --merge lands PRs {numbers} or nothing. "
@@ -373,6 +404,7 @@ def _merge_action(mode: str, group: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "action": "merge",
         "land": mode,
+        "via": via,
         "through": through,
         "prs": [row["number"] for row in group],
         "heads": {str(row["number"]): row["head"] for row in group},
@@ -390,19 +422,40 @@ def _label(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _rebase(row: dict[str, Any], expected: str) -> dict[str, Any]:
+def _rebase(
+    row: dict[str, Any],
+    expected: str,
+    open_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
     return {
         "action": "rebase",
         "pr": row["number"],
         "base": expected,
+        "sync_prs": [item["number"] for item in open_rows],
         "reason": (
             f"PR {row['number']} is {row['mergeable'] or 'mis-based'} on {row['base']}; "
             f"expected base {expected}. "
+            "Set harness:syncing on every PR in sync_prs before rewriting. "
             "Check out the stack, then gh stack rebase and gh stack push. "
             "Do not gh pr edit --base and do not merge the base into the head. "
-            "Post a harness-rebase marker on a layer only when its range-diff is empty."
+            "Post a harness-rebase marker only when "
+            "stack_state.py range-diff reports unchanged."
         ),
     }
+
+
+def _ancestor_blocking(row: dict[str, Any], by_num: dict[int, dict[str, Any]]) -> bool:
+    seen: set[int] = set()
+    parent_number = row["parent"]
+    while parent_number and parent_number not in seen:
+        seen.add(parent_number)
+        parent = by_num.get(parent_number)
+        if parent is None:
+            return False
+        if parent["labels"] & BLOCKING_LABELS:
+            return True
+        parent_number = parent["parent"]
+    return False
 
 
 def _prepare(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
@@ -478,17 +531,36 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
     broken = next((row for row in open_rows if _broken(row, by_num, trunk)), None)
     prefix_end = prefix[-1]["index"] if prefix else None
 
+    if (
+        mode == "progressive"
+        and prefix
+        and len(rows) < 2
+        and slices_remaining > 0
+        and (broken is None or broken["index"] > prefix_end)
+    ):
+        parent = open_rows[-1]
+        return {
+            "action": "continue",
+            "parent_pr": parent["number"],
+            "base_branch": parent["head_name"],
+            "next_index": parent["index"] + 1,
+            "land": mode,
+            "reason": (
+                "the only pull request is ready, but GitHub needs two pull "
+                "requests before gh stack merge; open the next slice first"
+            ),
+        }
     if mode == "progressive" and prefix and (broken is None or broken["index"] > prefix_end):
-        return _merge_action("progressive", prefix)
+        return _merge_action("progressive", prefix, _merge_via(rows))
     if (
         mode == "atomic"
         and slices_remaining == 0
         and broken is None
         and len(prefix) == len(open_rows)
     ):
-        return _merge_action("atomic", open_rows)
+        return _merge_action("atomic", open_rows, _merge_via(rows))
     if broken is not None:
-        return _rebase(broken, _expected_base(broken, by_num, trunk))
+        return _rebase(broken, _expected_base(broken, by_num, trunk), open_rows)
 
     for row in open_rows:
         if _ready(row, by_num, trunk):
@@ -501,6 +573,9 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
                 "round": latest["round"],
                 "verdict": latest["verdict"],
                 "reviewed_head": latest["head"],
+                "sync_prs": [
+                    item["number"] for item in open_rows if item["index"] > row["index"]
+                ],
                 "reason": (
                     "latest trusted review requested changes and that round has no "
                     "trusted harness-fix yet; the review head does not have to match "
@@ -569,7 +644,7 @@ def decide_review(payload: dict[str, Any]) -> dict[str, Any]:
     for row in _open_rows(rows):
         if "harness:awaiting-review" not in row["labels"]:
             continue
-        if row["labels"] & BLOCKING_LABELS:
+        if row["labels"] & BLOCKING_LABELS or _ancestor_blocking(row, by_num):
             continue
         if row["mergeable"] != "MERGEABLE":
             continue
@@ -598,20 +673,26 @@ def decide_review(payload: dict[str, Any]) -> dict[str, Any]:
     return {"action": "idle", "reason": "no eligible layer"}
 
 
-def decide(role: str, payload: dict[str, Any]) -> dict[str, Any]:
+def decide(role: str, payload: Any) -> dict[str, Any]:
     if role == "develop":
         return decide_develop(payload)
     if role == "review":
         return decide_review(payload)
-    raise SystemExit(f"Unknown role {role!r}. Use develop or review.")
+    if role == "range-diff":
+        text = payload if isinstance(payload, str) else ""
+        return {"unchanged": range_diff_unchanged(text)}
+    raise SystemExit(f"Unknown role {role!r}. Use develop, review, or range-diff.")
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("role", choices=["develop", "review"])
+    parser.add_argument("role", choices=["develop", "review", "range-diff"])
     parser.add_argument("payload", type=argparse.FileType("r"))
     args = parser.parse_args(argv)
-    payload = json.load(args.payload)
+    if args.role == "range-diff":
+        payload: dict[str, Any] | str = args.payload.read()
+    else:
+        payload = json.load(args.payload)
     json.dump(decide(args.role, payload), sys.stdout)
     sys.stdout.write("\n")
 

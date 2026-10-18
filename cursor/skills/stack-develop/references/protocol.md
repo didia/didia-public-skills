@@ -74,8 +74,11 @@ when a rebase did not change that layer's diff:
 ```
 
 Chain them (`old` → `mid` → `new`). Post one only when
-`git range-diff <old-base>..<old-head> <new-base>..<new-head>` is empty.
-A non-empty range-diff means the approval does not cover the new head.
+`python3 scripts/stack_state.py range-diff` reports `"unchanged": true` for
+`git -c color.ui=never range-diff <old-base>..<old-head> <new-base>..<new-head>`.
+Unchanged means every summary row uses `=` (an unchanged rebase still prints
+those rows). A `!`, `<`, or `>` row, or a diff hunk, means the approval does
+not cover the new head.
 
 Round count is the number of `harness-review` markers on the PR. Do not keep a
 separate counter that both sides edit.
@@ -95,8 +98,12 @@ runtime loop.
 
 ## Land modes
 
-The chain must be a GitHub stack (`gh stack submit` or `gh stack link`), in one
-repository. `gh pr merge` cannot merge a stack.
+A chain of two or more pull requests must be a GitHub stack (`gh stack submit`
+or `gh stack link`), in one repository. GitHub will not create a stack from a
+single pull request. `gh pr merge` cannot merge a stack. When the only pull
+request is ready and another slice is still planned, open that slice before
+`gh stack merge`. When the only pull request is ready and no slice remains,
+`gh pr merge --match-head-commit` lands it.
 
 | `land` | What merges |
 |---|---|
@@ -119,10 +126,11 @@ the stack is `atomic`.
 
 - Stack order: PR *n* bases on the head branch of PR *n−1* (PR 1 bases on the
   repo trunk, e.g. `main` or `dev`).
-- Merge with `gh stack merge <through> --yes --merge`, where `through` is the
-  field the state script returned. Refetch first and stop if any PR in `heads`
-  has a different `headRefOid`. If the repo rejects merge commits, rerun the
-  same command with `--squash` or `--rebase`. Do not use `gh pr merge`.
+- Merge with the command for the script's `via` field. `stack` is
+  `gh stack merge <through> --yes --merge`. `pr` is
+  `gh pr merge <through> --merge --match-head-commit <head>`. Refetch first
+  and stop if any PR in `heads` has a different `headRefOid`. If the repo
+  rejects merge commits, rerun the stack command with `--squash` or `--rebase`.
 - An approval or fix counts only when its SHA covers the live head, its author
   is a trusted login, and the review is submitted (not pending or dismissed).
 - After a prefix merges, GitHub rebases the PRs above it onto trunk. Do not
