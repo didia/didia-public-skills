@@ -88,6 +88,23 @@ separate counter that both sides edit.
 Same severity rubric as `pr-review`: Critical and High block merge and further
 external rounds until fixed. Medium and Low do not block.
 
+## Internal review on the developer harness
+
+`develop-review`'s 5-cycle loop stays the budget for a single pull request with no
+external reviewer. On a stack it is not. Models stay the Complexity row; only the
+number of reviewer spawns changes.
+
+- Each new slice gets one internal review (`preflight`), then at most one fix.
+  The reviewer is not spawned again. The pull request opens either way.
+- A fix for an external round below `max-rounds` is applied by the developer
+  only (`apply`). The next external pass is the re-read.
+- A fix for the last external round is applied, then read once (`verify`). The
+  developer posts `harness-fix` only if that read approves. Otherwise it stops
+  and does not mark the layer fixed.
+- A rebase that changes behavior is an `apply`. It does not mint an approval.
+
+External `max-rounds` is unchanged.
+
 ## Stack issue (from-scratch stacks)
 
 When the developer slices a new task, or follows an approved plan's stack, it

@@ -48,6 +48,8 @@ Planning always runs at `planning_effort` (default `high`) on providers that sup
 
 `stack-develop` and `stack-review` call `scripts/stack_state.py` for the next action (rebase, address, merge, label, continue, review). Default `land: progressive` merges a ready prefix with `gh stack merge` while upper layers stay open. `land: atomic` merges the whole open stack once every layer is ready. The script caps unreviewed PRs above the stack bottom at two, and those PRs are still reviewable. Poll with `/loop` or a scheduled wakeup.
 
+On a stack, `develop-review` does not run its 5-cycle loop. A new slice gets one reviewer spawn and at most one fix (`preflight`). A fix for an external round that will be reviewed again is developer-only (`apply`). The fix for the last external round gets one reviewer spawn (`verify`) and is posted only if that spawn approves. A single PR with no external reviewer still uses the 5-cycle loop. Models are unchanged. The previous always-on 5-cycle behavior, and how to restore it, is in [docs/internal-review-strategy.md](docs/internal-review-strategy.md).
+
 Optional label overrides per provider: `planning_model_label`, `development_model_label`, `review_model_label`.
 
 ## Install

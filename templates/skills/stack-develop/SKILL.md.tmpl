@@ -28,8 +28,9 @@ Check up front and say what is missing:
 
 - **`max-rounds`** — from the user (`review rounds: 5`). Default **2**, so the
   external reviewer sees the fix. Written on the stack issue and every PR
-  marker. Counts external `pr-review` passes only; `develop-review` keeps its
-  own internal cap of 5.
+  marker. Counts external `pr-review` passes only. Do not run `develop-review`'s
+  **full** budget (cap of 5) on a stack. Use the budgets in the actions below.
+  Same reviewer model either way.
 - **Trunk** — base of stack index 1 (`main`, `dev`, or whatever the user
   confirms). Default for a from-scratch stack in this repo's generator is
   `{{ trunk }}` when the user does not name one.
@@ -101,9 +102,9 @@ then tell the user.
 3. Record each open layer's base and head SHA.
 4. `gh stack rebase`, then `gh stack push`. On a conflict, resolve it and
    `gh stack rebase --continue`. When the resolution changes behavior beyond
-   taking one side, follow `develop-review` in **fix mode** on that layer
-   before continuing. Never force-push trunk. Do not `gh pr edit --base`. Do
-   not merge the base into the head.
+   taking one side, follow `develop-review` with budget **apply** on that layer
+   before continuing. Do not spawn its reviewer. Never force-push trunk. Do not
+   `gh pr edit --base`. Do not merge the base into the head.
 5. For each layer, run
    `git -c color.ui=never range-diff <old-base>..<old-head> <new-base>..<new-head>`
    and pass that output to `python3 scripts/stack_state.py range-diff`. Post
@@ -122,9 +123,18 @@ Only when the script says `address`. An `approved` verdict is not this action.
 2. Set `harness:addressing-review` on that PR (remove `harness:awaiting-review`).
    Set `harness:syncing` on every PR in `sync_prs` and clear
    `harness:awaiting-review` there too. Those layers will be rewritten.
-3. Read and follow `develop-review` in **fix mode** with the external comments.
+3. Compare this action's `round` with `max-rounds`.
+   - `round` is below `max-rounds`: another external pass will read the fix.
+     Follow `develop-review` with budget **apply** and the external comments.
+     Do not spawn its reviewer.
+   - `round` is the last allowed external pass: this fix can merge with no
+     further external review. Follow `develop-review` with budget **verify**
+     and the external comments. Post `harness-fix` only when verify hands back
+     `IMPLEMENTATION_APPROVED`. If verify stops, tell the user and stop. Skip
+     steps 4–7. Do not post `harness-fix` for a diff the reviewer did not approve.
 4. Commit any uncommitted changes on the layer you fixed. Skip
    `develop-review`'s push and `gh pr create`, then push that layer's branch.
+   Skip this step when verify stopped.
 5. `gh stack rebase --upstack`, then `gh stack push`, so layers above pick up
    the fix. Post `harness-rebase` on each upper layer only when
    `stack_state.py range-diff` reports `"unchanged": true`.
@@ -171,8 +181,11 @@ GitHub's mergeability was `UNKNOWN` and a later fetch says `MERGEABLE`.
 1. Create the next branch at `next_index`. When the stack has no branches yet,
    `gh stack init --base <base_branch> <branch>`. Otherwise check out
    `base_branch` and `gh stack add <branch>`.
-2. Read and follow `develop-review` for that slice through approval. The branch
-   already exists. Skip its branch question.
+2. Read and follow `develop-review` with budget **preflight** for that slice.
+   The branch already exists. Skip its branch question. One reviewer spawn, then
+   at most one fix. Do not run the 5-cycle loop, and do not wait for
+   `IMPLEMENTATION_APPROVED` before opening the PR. A preflight that still has
+   findings after its one fix is a normal end.
 3. Commit any uncommitted changes with a message describing the slice. That is
    the commit step of `develop-review`'s "open a pull request" section. Skip
    that section's push and `gh pr create`.
@@ -186,6 +199,9 @@ bottom. Adopted PRs are not reimplemented.
 ## Honesty
 
 - Do not write feature code outside `develop-review`.
+- Do not run `develop-review` budget **full** on a stack slice, an address, or a rebase.
+- Do not spawn the reviewer while an external round remains, or a second time on a preflight.
+- Do not change the developer or reviewer model to save tokens.
 - Do not raise `max-rounds` or invent a second review procedure.
 - Do not spawn `stack-review`; the other harness runs that skill.
 - Do not merge past unfixed Critical/High findings.

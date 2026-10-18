@@ -113,13 +113,17 @@ Do not open one PR and do not create the `plan-develop/<slug>` branch. Read and 
 `stack-develop` — normally at `~/.claude/skills/stack-develop/SKILL.md` — with the
 approved slice list and the plan's Land value. Those slices and that Land line are the
 stack. Do not re-slice the plan and do not change `progressive` to `atomic`, or the
-reverse, because a later slice is still open. `stack-develop` runs `develop-review` once
-per slice.
+reverse, because a later slice is still open. `stack-develop` runs `develop-review`
+in budget **preflight** once per slice: one reviewer spawn, one fix if needed, no
+internal re-review. External `pr-review` is the quality gate for those slices. The
+5-cycle **full** budget applies only to `Delivery: single`.
 
-On the single PR, or on any slice inside the stack, if `develop-review` hits its
-fix/review cap without approval, it stops on its own and shows the user the diff and the
-reviewer's remaining objections. The pipeline ends there. Don't override that and open a
-PR for an implementation the reviewer didn't approve.
+On a single PR, if `develop-review` hits its fix/review cap without approval, it stops
+on its own and shows the user the diff and the reviewer's remaining objections. The
+pipeline ends there. Don't override that and open a PR for an implementation the
+reviewer didn't approve. On a stack, a preflight that still has findings after its one
+fix is not that stop — `stack-develop` opens the PR anyway. A **verify** budget that
+fails on the last external round does stop; don't post a fix the reviewer rejected.
 
 ## Keeping the pipeline honest
 

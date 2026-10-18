@@ -31,6 +31,11 @@ asks for. You do **not** edit code or merge.
   if missing. Counts your `pr-review` passes only. Never raise the cap.
 - Blocking findings: Critical and High (same rubric as `pr-review`). Medium
   and Low do not set `changes-requested`.
+- The developer harness does not loop its reviewer to approval before you see a
+  slice. Each slice had one internal preflight and at most one fix. Your pass is
+  the quality gate. A fix for your last allowed round is read once on that
+  harness before it can merge. A fix for an earlier round comes back to you
+  without that internal re-read.
 
 ## Main loop
 
