@@ -11,6 +11,11 @@ code: **develop → review → fix → …** until the reviewer approves or the
 cap is hit. The model for each spawn follows the plan's **Complexity** rating
 (`low` / `medium` / `high`). See `references/complexity-rubric.md`.
 
+How many times the reviewer is spawned depends on the **review budget** the caller
+names. The default, **full**, is the loop above. A caller that already has an external
+reviewer names a tighter budget so this skill does not spend a reviewer spawn on every
+fix. The model row does not change with the budget.
+
 ## Why this shape
 
 A model reviewing its own diff is grading its own homework with the answer key it wrote.
@@ -99,7 +104,32 @@ You need something concrete enough to implement against. That's either:
 
 Confirm which branch the work belongs on before any code is written.
 
+## Review budget
+
+Use **full** when nobody names a budget. That is the direct-task case and `plan-develop`
+with `Delivery: single`: this skill is the only code review before the PR opens.
+
+`stack-develop` names one of the other three. An external `pr-review` is the quality
+gate there, so this skill must not repeat that gate. Spawn the reviewer from the same
+Complexity row in every budget. Do not switch to a cheaper model, and do not lower the
+rating, to save tokens.
+
+| Budget | Reviewer spawns | After `NEEDS_FIXES` |
+|---|---|---|
+| **full** | Once, then again after each fix. Cap: 5 fix/review cycles | Back to Step 2, until approval or the cap |
+| **preflight** | Once, before the PR exists | One developer fix. Do not spawn the reviewer again |
+| **apply** | None | The caller already has the feedback. One developer fix |
+| **verify** | Once, after the developer applies the feedback | Stop. Do not spawn the reviewer again, and do not treat the diff as approved |
+
+Tell the reviewer which budget this spawn is, in one line:
+
+- **full** — this pass can be followed by another internal pass, up to the cap.
+- **preflight** — an external review will read this diff next. Block on defects. Approve nits.
+- **verify** — this is the last read before the change can merge.
+
 ## Step 1: Develop
+
+Skip this step on budget **apply** or **verify**. The caller already has a diff.
 
 Using the Complexity row from Step 0, spawn the developer in **build mode**.
 Give it the plan or task, plus any constraints the user stated. It writes the code,
@@ -107,6 +137,8 @@ follows existing conventions in the repo, runs whatever tests and linters alread
 and reports what it changed file by file and what it ran.
 
 ## Step 2: Review
+
+Skip this step on budget **apply**. **verify** runs it once, after the fix in Step 3, not before.
 
 Using the same Complexity row, spawn the reviewer with:
 
@@ -119,6 +151,10 @@ Do **not** pass the developer's summary in place of the diff. The reviewer ends 
 exactly one line: `IMPLEMENTATION_APPROVED` or `NEEDS_FIXES: <numbered, specific list>`.
 
 ## Step 3: Fix loop
+
+Follow the budget from the caller.
+
+### full
 
 - **Approved** → go to Step 4.
 - **Needs fixes** → spawn the developer again (same Complexity row) in **fix mode** with the
@@ -135,10 +171,38 @@ Watch for the reviewer moving the goalposts between rounds — new objections ab
 that never changed suggest it's reviewing to a shifting standard. If round three is
 flagging things round one didn't, mention it to the user rather than looping on it.
 
+### preflight
+
+Step 2 already ran once.
+
+- **Approved** → hand the diff back to the caller. Do not open a pull request.
+- **Needs fixes** → one developer spawn in **fix mode** with the numbered feedback
+  verbatim. Then hand the diff back, including any item the fix did not claim to clear.
+  Do not return to Step 2. This is a normal end. The external reviewer reads the result.
+
+### apply
+
+Skip Steps 1 and 2. Spawn the developer once in **fix mode** with the feedback the
+caller passed. Hand the diff back. Do not spawn the reviewer.
+
+### verify
+
+Skip Step 1.
+
+1. Spawn the developer once in **fix mode** with the caller's feedback.
+2. Run Step 2 once on the diff that fix produced.
+3. **Approved** → hand back `IMPLEMENTATION_APPROVED`. Do not open a pull request.
+4. **Needs fixes** → stop. Show the caller the diff and the objections. Do not spawn
+   the reviewer again, and do not hand back an approval.
+
 ## Step 4: Open the pull request
 
-Once Step 3 ends in `IMPLEMENTATION_APPROVED`, open the PR automatically — don't pause to
-show the branch or diff first. The user reviews at the PR level, not before it exists.
+Step 4 runs only for budget **full**, and only once Step 3 ends in
+`IMPLEMENTATION_APPROVED`. **preflight**, **apply**, and **verify** hand the diff back
+to the caller; they do not push and they do not open a pull request.
+
+Open the PR automatically — don't pause to show the branch or diff first. The user
+reviews at the PR level, not before it exists.
 
 1. Commit any uncommitted changes with a message describing the change.
 2. Push the branch.
@@ -161,6 +225,8 @@ that it's pushed (or ready to push) and reviewed, so they can open the PR themse
 - The reviewer reads the diff, never the developer's narration of the diff. Self-reported
   "this works" is the thing being checked, not an input to the check.
 - Don't quietly raise the cap when a loop stalls — the cap exists to surface disagreement.
+- Don't spawn the reviewer a second time on **preflight** or **verify**, and don't spawn
+  it at all on **apply**. Don't change models to buy another pass.
 - If the developer's fixes keep breaking something the previous round fixed, stop looping
   and surface it. Oscillation means the two models disagree about the design, not the
   details, and no number of fix rounds resolves that.

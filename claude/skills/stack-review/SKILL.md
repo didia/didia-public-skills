@@ -1,6 +1,6 @@
 ---
 name: stack-review
-description: Use when the user says you are the reviewer in a cross-harness review, asks to watch a stack of PRs for harness:awaiting-review, mentions "stack-review", or wants another harness to review stacked PRs while a developer keeps opening child PRs. Also use when they point at a repo and ask you to review the bottom of a labeled stack until the round cap is hit. Requires pr-review installed on this harness and the gh CLI.
+description: Use when the user says you are the reviewer in a cross-harness review, asks to watch a stack of PRs for harness:awaiting-review, mentions "stack-review", or wants another harness to review stacked PRs while a developer keeps opening child PRs. Also use when they point at a repo and ask you to review labeled layers of a stack, including layers whose parent is still open, until the round cap is hit. Requires pr-review installed on this harness and the gh CLI.
 compatibility: Claude Code or Cowork (needs Task-tool subagents to run separate generative/adversarial context windows), pr-review installed alongside this skill, and the gh CLI authenticated for reading PRs and posting reviews.
 ---
 <!-- AUTO-GENERATED — do not edit. Regenerate: python scripts/generate.py -->
@@ -31,6 +31,11 @@ asks for. You do **not** edit code or merge.
   if missing. Counts your `pr-review` passes only. Never raise the cap.
 - Blocking findings: Critical and High (same rubric as `pr-review`). Medium
   and Low do not set `changes-requested`.
+- The developer harness does not loop its reviewer to approval before you see a
+  slice. Each slice had one internal preflight and at most one fix. Your pass is
+  the quality gate. A fix for your last allowed round is read once on that
+  harness before it can merge. A fix for an earlier round comes back to you
+  without that internal re-read.
 
 ## Main loop
 
@@ -70,13 +75,18 @@ When a PR is eligible:
    start one. Sign the review with your trusted login.
 
 Default `max-rounds` is 2, so a `changes-requested` review gets a second pass
-after the fix. `approved` stops early. The developer may merge once the cap is
-used and the fix is pushed.
+after the fix. `approved` stops early on that layer. Review the next eligible
+layer without waiting for this one to merge. Under `land: progressive` the
+developer can merge a ready prefix while you are still reviewing above it.
+Under `land: atomic` nothing lands until every open layer is ready.
 
 ## Honesty
 
 - Do not edit code, push branches, or merge.
-- Do not review stacked (non-bottom) PRs, conflicting PRs, or PRs still
-  labeled `harness:syncing` / `harness:addressing-review`.
+- Do not skip a layer because it is not the bottom, because its parent is still
+  open, or because it is labeled `harness:stacked`.
+- Do not review conflicting PRs, PRs whose base is stale, or PRs still labeled
+  `harness:syncing` / `harness:addressing-review`. Do not review a layer while
+  any ancestor is labeled `harness:syncing` or `harness:addressing-review`.
 - Do not raise `max-rounds` or invent a second review procedure.
 - Do not spawn `stack-develop`; the other harness runs that skill.

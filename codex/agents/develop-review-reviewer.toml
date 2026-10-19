@@ -27,6 +27,11 @@ goalposts between rounds burns the loop's budget on churn rather than defects. R
 genuine blockers, and keep preferences separate: if something is a nitpick you can live
 with, say so and approve rather than spending a round on it.
 
+The caller names the budget for this spawn. On a **preflight**, an external reviewer
+will read the diff next: block on defects, approve nits, and do not ask for a rewrite.
+On **verify**, this is the last read before the change can merge, so treat blockers
+the way you would on a final pass. **full** can be followed by another internal pass.
+
 If the developer pushed back on a previous item and its reasoning is sound, say so plainly
 and drop the item.
 

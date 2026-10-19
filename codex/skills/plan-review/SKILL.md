@@ -77,7 +77,11 @@ Spawn a subagent named `plan-review-planner` in a fresh context with `model: gpt
 - on later iterations, the validator's feedback verbatim.
 
 Ask for a plan, not code. The planner returns Approach / Files to touch / Edge cases &
-risks / Test plan / **Complexity** (`low` | `medium` | `high` plus a short reason).
+risks / Test plan / **Delivery** / **Complexity** (`low` | `medium` | `high` plus a short
+reason). Delivery is `Delivery: single` for one pull request, or `Delivery: stack` with
+`Land: progressive` or `Land: atomic` and the ordered slices. Progressive means every
+slice can be tested and deployed on its own. Atomic means the stack lands together
+because a slice cannot ship without a later one.
 
 ## Step 2: Validate (GPT 6 Astra)
 
@@ -87,12 +91,15 @@ critique that isn't anchored by the planner's own justification.
 
 The validator ends with exactly one line: `PLAN_APPROVED` or
 `PLAN_NEEDS_REVISION: <specific feedback>`. It must reject a plan that lacks a valid
-Complexity rating or whose rating contradicts the described scope.
+Complexity rating or whose rating contradicts the described scope. It must also reject a
+plan whose Delivery line is missing, a stack with no `Land: progressive` or
+`Land: atomic` line, and a progressive stack whose slices are not each independently
+testable and deployable.
 
 - **Approved** → done. Go to Step 3.
 - **Needs revision** → back to Step 1 with the feedback, asking the planner to revise the
   existing plan rather than start over. If the validator rewrote any substance (approach,
-  files, or Complexity), this pass is required: the planner absorbs or rejects those edits,
+  files, Delivery, Land, or Complexity), this pass is required: the planner absorbs or rejects those edits,
   and the validator does not approve a plan it just rewrote. **Cap: 3 plan iterations.**
 
 If three rounds pass without approval, stop. Show the user the latest plan and the
@@ -105,19 +112,23 @@ contested, and picking a side for the user hides that.
 Return the plan as the validator left it — the validator is allowed to rewrite parts, so
 its version is the one to carry forward, not the planner's last draft. Confirm the
 **Complexity** line is still present and accurate; that rating is what `develop-review`
-and `pr-review` will use for effort.
+and `pr-review` will use for effort. Confirm **Delivery**
+is still present. A `Delivery: stack` plan carries its `Land` line into `stack-develop`.
+A `Delivery: single` plan goes to `develop-review`.
 
 Report alongside it:
 
 - how many iterations it took (one-pass approval and third-round approval mean different
   things about how settled the plan is),
 - the Complexity rating,
+- the Delivery line, and the Land line when it is a stack,
 - anything the validator flagged as a risk but approved anyway — that's the list worth
   watching during implementation.
 
 If this was invoked as the first half of `plan-develop`, pass the approved plan straight
-into `develop-review`. If it was invoked on its own, ask whether the user wants to proceed
-to implementation via `develop-review`.
+on. `Delivery: single` goes to `develop-review`. `Delivery: stack` goes to `stack-develop`
+with the plan's slice order and Land value. If it was invoked on its own, ask whether the
+user wants to proceed, and name which of those two skills matches the Delivery line.
 
 ## Keeping the loop honest
 
@@ -126,5 +137,6 @@ to implementation via `develop-review`.
 - Don't quietly raise the cap when a loop stalls — the cap exists to surface disagreement,
   and raising it converts a signal into more of the same noise.
 - If the planner keeps expanding scope or the validator keeps finding whole missing
-  pieces, that's usually a sign the task should be split into several smaller plans.
-  Pause and check with the user rather than planning one enormous change.
+  pieces, the plan should be `Delivery: stack` with an explicit Land line, or it should
+  be split into unrelated plans. Pause and check with the user rather than planning one
+  enormous change.
