@@ -68,6 +68,7 @@ KNOWN_LABELS = {
     "gpt-6-astra": "GPT 6 Astra",
     "o3": "o3",
     "o4-mini": "o4-mini",
+    "haiku": "Haiku",
     "sonnet": "Sonnet",
     "opus": "Opus",
     "inherit": "Auto",

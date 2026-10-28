@@ -20,7 +20,7 @@ class GenerateTests(unittest.TestCase):
                     ctx["review_matrix"][level]["model"],
                 )
             if ctx["effort_key"]:
-                floor = "low" if provider == "codex" else "medium"
+                floor = "low" if provider in ("codex", "claude") else "medium"
                 for row in ctx["review_matrix"].values():
                     self.assertGreaterEqual(
                         generate.EFFORT_RANK[row["effort"]],

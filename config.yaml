@@ -22,6 +22,24 @@ defaults:
 
 providers:
   claude:
+    # develop-review / pr-review (defaults still plan Sonnet @ high, validate Opus @ high).
+    review_effort_floor: low
+    development_by_complexity:
+      low:
+        model: haiku
+        effort: medium
+      medium:
+        effort: medium
+      high:
+        effort: high
+    review_by_complexity:
+      low:
+        model: sonnet
+        effort: medium
+      medium:
+        effort: low
+      high:
+        effort: medium
     skills_dir: "~/.claude/skills"
     agents_dir: "~/.claude/agents"
     project_agents_dir: ".claude/agents"
