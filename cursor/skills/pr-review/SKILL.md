@@ -24,7 +24,7 @@ After Phase 1, determine Complexity from the diff, not from the author's word:
    money, migrations, concurrency, or a public API. Otherwise run the full review.
 
 Then pick scope and review model from that rating.
-
+Use the same review model as the **develop-review** reviewer row for that Complexity.
 
 
 | Complexity | Review mode | Review model |

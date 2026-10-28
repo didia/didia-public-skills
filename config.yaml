@@ -22,7 +22,8 @@ defaults:
 
 providers:
   claude:
-    # develop-review / pr-review (defaults still plan Sonnet @ high, validate Opus @ high).
+    # review_by_complexity → develop-review reviewer and pr-review (same spawns).
+    # plan-review → defaults: Sonnet planner @ high, Opus validator @ high.
     review_effort_floor: low
     development_by_complexity:
       low:

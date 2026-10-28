@@ -24,7 +24,7 @@ After Phase 1, determine Complexity from the diff, not from the author's word:
    money, migrations, concurrency, or a public API. Otherwise run the full review.
 
 Then pick scope{% if effort_key %} and spawn effort{% else %} and review model{% endif %} from that rating.
-{% if effort_key %}The reviewer's effort is floored at medium, so a low rating does not put the critic on low effort.{% endif %}
+{% if effort_key %}Use the same model and effort as the **develop-review** reviewer row for that Complexity (table below). Review effort is floored at `{{ review_effort_floor }}` unless the complexity row sets it higher.{% else %}Use the same review model as the **develop-review** reviewer row for that Complexity.{% endif %}
 
 {% if effort_key %}
 | Complexity | Review mode | Review spawn (model + effort) |
