@@ -32,26 +32,28 @@ providers:
     environment_name: "Claude Code or Cowork"
 
   codex:
-    # Plan on Sol @ high; plan-validator on Astra @ high. Build: Terra @ low else Sol.
-    # develop-review reviewer and pr-review spawn gpt-6.1-sol at low/medium/high effort.
+    # Plan on Sol @ high; plan-validator on Astra @ high.
+    # develop-review / pr-review: critic is Astra at lower effort than Sol build.
     planning_model: gpt-6.1-sol
     development_model: gpt-6.1-sol
     review_model: gpt-6-astra
     review_effort_floor: low
-    allow_same_develop_review_model: true
     development_by_complexity:
       low:
         model: gpt-5.6-terra
-    review_by_complexity:
-      low:
-        model: gpt-6.1-sol
-        effort: low
       medium:
         model: gpt-6.1-sol
         effort: medium
       high:
         model: gpt-6.1-sol
         effort: high
+    review_by_complexity:
+      low:
+        effort: low
+      medium:
+        effort: low
+      high:
+        effort: medium
     skills_dir: "~/.codex/skills"
     agents_dir: "~/.codex/agents"
     project_agents_dir: ".codex/agents"
