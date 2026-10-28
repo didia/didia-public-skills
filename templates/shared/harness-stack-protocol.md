@@ -115,12 +115,19 @@ runtime loop.
 
 ## Land modes
 
-A chain of two or more pull requests must be a GitHub stack (`gh stack submit`
+A chain of two or more open pull requests must be a GitHub stack (`gh stack submit`
 or `gh stack link`), in one repository. GitHub will not create a stack from a
-single pull request. `gh pr merge` cannot merge a stack. When the only pull
-request is ready and another slice is still planned, open that slice before
-`gh stack merge`. When the only pull request is ready and no slice remains,
-`gh pr merge --match-head-commit` lands it.
+single pull request. `gh pr merge` cannot merge a stack. Membership is the
+current remote stack from `gh stack view --json` (`remote_stack_prs`), not the
+count of harness pull requests in the payload. After a stack fully merges,
+`submit` starts a new stack on trunk, and that new stack has no remote stack
+object until it contains two pull requests. Merged pull requests from the
+completed stack stay in the payload for ancestry and do not count. When the
+ready pull request is not in `remote_stack_prs` and another slice is still
+planned, open that slice before `gh stack merge`. When it is ready and no
+slice remains, `gh pr merge --match-head-commit` lands it. A pull request that
+`remote_stack_prs` does list, including the last open layer of a stack that
+already existed, still uses `gh stack merge`.
 
 | `land` | What merges |
 |---|---|
@@ -150,11 +157,16 @@ the stack is `atomic`.
   rejects merge commits, rerun the stack command with `--squash` or `--rebase`.
 - An approval or fix counts only when its SHA covers the live head, its author
   is a trusted login, and the review is submitted (not pending or dismissed).
-- After a prefix merges, GitHub rebases the PRs above it onto trunk. Do not
-  `gh pr edit --base`. If a child still bases on a merged parent, or any PR is
-  `CONFLICTING`, the script returns `rebase`: `gh stack rebase`, then
-  `gh stack push`. A merge commit in the stack breaks it; do not merge the base
-  into the head.
+- After a prefix merges, GitHub rebases the PRs above it onto trunk and
+  assigns new head SHAs even when the patch is unchanged. Before merging,
+  record each remaining layer's base and head. After GitHub finishes, compare
+  those ranges with `git range-diff` and post `harness-rebase` only when
+  `stack_state.py range-diff` reports `"unchanged": true`. Do not post it when
+  the patch changed. The `rebase` action does not do this when the new bases
+  are already correct. Do not `gh pr edit --base`. If a child still bases on a
+  merged parent, or any PR is `CONFLICTING`, the script returns `rebase`:
+  `gh stack rebase`, then `gh stack push`. A merge commit in the stack breaks
+  it; do not merge the base into the head.
 - A payload that omits a `stack-parent`, or whose parent is closed and
   unmerged, is a stop. Do not point that child at trunk yourself.
 - At most two open PRs above the bottom may have zero `harness-review` markers.
