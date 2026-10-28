@@ -14,6 +14,7 @@ payload.json:
       "stack_id": "optional-filter",
       "slices_remaining": 1,
       "max_unreviewed_ahead": 2,
+      "remote_stack_prs": [1],
       "land": "progressive",
       "trusted_reviewers": ["reviewer-login"],
       "trusted_developers": ["developer-login"],
@@ -41,6 +42,10 @@ payload.json:
     }
 
 Include merged and closed parent PRs. A missing parent is an incomplete payload.
+`remote_stack_prs` is the PR numbers `gh stack view --json` lists for the
+submitted remote stack (it has a stack id or a non-zero stack number). Use []
+when that view has no remote stack. Merged PRs from a completed earlier stack
+stay in `prs` for ancestry and are not members unless this view lists them.
 
 develop actions: rebase, address, merge, label, continue, idle, stop
 review actions: review, idle, stop
@@ -374,8 +379,30 @@ def range_diff_unchanged(text: str) -> bool:
     return True
 
 
-def _merge_via(rows: list[dict[str, Any]]) -> str:
-    return "stack" if len(rows) >= 2 else "pr"
+def _remote_members(payload: dict[str, Any]) -> set[int]:
+    raw = payload.get("remote_stack_prs")
+    if not isinstance(raw, list):
+        return set()
+    members: set[int] = set()
+    for item in raw:
+        try:
+            members.add(int(item))
+        except (TypeError, ValueError):
+            continue
+    return members
+
+
+def _merge_via(
+    group: list[dict[str, Any]],
+    members: set[int],
+    open_rows: list[dict[str, Any]],
+) -> str | None:
+    """How to land `group`. None means the caller must not guess a merge command."""
+    if group and all(row["number"] in members for row in group):
+        return "stack"
+    if len(open_rows) == 1 and len(group) == 1:
+        return "pr"
+    return None
 
 
 def _merge_action(mode: str, group: list[dict[str, Any]], via: str) -> dict[str, Any]:
@@ -384,10 +411,10 @@ def _merge_action(mode: str, group: list[dict[str, Any]], via: str) -> dict[str,
     numbers = ", ".join(str(row["number"]) for row in group)
     if via == "pr":
         reason = (
-            f"PR {through} is ready and is the only pull request in the payload, "
+            f"PR {through} is ready and is not in a submitted remote stack, "
             "so GitHub will not form a stack. "
             f"gh pr merge {through} --merge --match-head-commit {head}. "
-            "Do not gh stack merge."
+            "Do not gh stack merge. Merged PRs from an earlier stack do not count."
         )
     elif mode == "atomic":
         reason = (
@@ -480,6 +507,7 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
     trunk = payload.get("trunk") or "main"
     ahead_cap = int(payload.get("max_unreviewed_ahead") or 2)
     slices_remaining = int(payload.get("slices_remaining") or 0)
+    members = _remote_members(payload)
     problem, rows = _prepare(payload)
     if problem:
         return problem
@@ -533,9 +561,10 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
 
     if (
         mode == "progressive"
-        and prefix
-        and len(rows) < 2
+        and len(open_rows) == 1
+        and len(prefix) == 1
         and slices_remaining > 0
+        and prefix[0]["number"] not in members
         and (broken is None or broken["index"] > prefix_end)
     ):
         parent = open_rows[-1]
@@ -546,19 +575,36 @@ def decide_develop(payload: dict[str, Any]) -> dict[str, Any]:
             "next_index": parent["index"] + 1,
             "land": mode,
             "reason": (
-                "the only pull request is ready, but GitHub needs two pull "
-                "requests before gh stack merge; open the next slice first"
+                "this ready pull request is not in a submitted remote stack, "
+                "and GitHub needs two pull requests before gh stack merge; "
+                "open the next slice first. Merged PRs from an earlier stack "
+                "do not count."
             ),
         }
+
+    def _merge_or_stop(land: str, group: list[dict[str, Any]]) -> dict[str, Any]:
+        via = _merge_via(group, members, open_rows)
+        if via is None:
+            numbers = ", ".join(str(row["number"]) for row in group)
+            return {
+                "action": "stop",
+                "reason": (
+                    f"PRs {numbers} are ready but remote_stack_prs does not list "
+                    "them. Refetch gh stack view --json and pass the submitted "
+                    "stack's PR numbers. Do not gh pr merge a multi-PR group."
+                ),
+            }
+        return _merge_action(land, group, via)
+
     if mode == "progressive" and prefix and (broken is None or broken["index"] > prefix_end):
-        return _merge_action("progressive", prefix, _merge_via(rows))
+        return _merge_or_stop("progressive", prefix)
     if (
         mode == "atomic"
         and slices_remaining == 0
         and broken is None
         and len(prefix) == len(open_rows)
     ):
-        return _merge_action("atomic", open_rows, _merge_via(rows))
+        return _merge_or_stop("atomic", open_rows)
     if broken is not None:
         return _rebase(broken, _expected_base(broken, by_num, trunk), open_rows)
 

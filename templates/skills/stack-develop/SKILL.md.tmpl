@@ -79,9 +79,15 @@ When the user passes an ordered list of PR URLs/numbers:
 
 Fetch every stack PR, including merged and closed parents (`gh pr view` with
 `reviews` and `comments`, which include `author.login` and review `state`).
+Also run `gh stack view --json` for the stack that is checked out. A remote
+stack exists when that JSON has a stack id or a non-zero stack number. Set
+`remote_stack_prs` to the pull request numbers in that view. When the id is
+empty and the number is 0, set `remote_stack_prs` to `[]`. Merged pull
+requests from a completed earlier stack stay in `prs` for ancestry; they are
+not remote-stack members unless this view lists them.
 Write the JSON payload documented in `scripts/stack_state.py`, including
-`trusted_reviewers`, `trusted_developers`, and `slices_remaining` (planned
-slices that have no PR yet). Run:
+`trusted_reviewers`, `trusted_developers`, `remote_stack_prs`, and
+`slices_remaining` (planned slices that have no PR yet). Run:
 
 ```bash
 python3 scripts/stack_state.py develop payload.json
@@ -149,6 +155,13 @@ Only when the script says `address`. An `approved` verdict is not this action.
 Refetch every PR in `prs`. If any `headRefOid` differs from `heads`, do not
 merge; ask the script again.
 
+Before the merge command, record the base and head SHA of every open layer
+that will stay open (open pull requests not listed in this action's `prs`).
+GitHub rebases those layers onto trunk after a prefix merge and gives them
+new SHAs. The explicit `rebase` action does not run when their bases are
+already correct, so this step is what keeps an approval attached to an
+unchanged patch.
+
 When `via` is `stack`:
 
 ```bash
@@ -163,12 +176,23 @@ script says the whole open stack is ready. If any PR in the group cannot merge,
 none do. If the repo rejects merge commits, rerun with `--squash` or
 `--rebase`. Do not `gh pr merge`.
 
-When `via` is `pr`, the payload has a single pull request, so GitHub will not
-form a stack. Merge that pull request with
+When `via` is `pr`, this pull request is not in a submitted remote stack, so
+GitHub will not form a stack. Merge that pull request with
 `gh pr merge <through> --merge --match-head-commit <head>` using the SHA in
-`heads`. Do not `gh stack merge` it. If `slices_remaining` is still positive,
-the script returns `continue` instead, so the next slice exists before the
-first stack merge.
+`heads`. Do not `gh stack merge` it. A later batch is the same: merged pull
+requests from a completed stack do not make the new pull request a remote
+stack. If `slices_remaining` is still positive, the script returns `continue`
+instead, so the next slice exists before that batch's first stack merge.
+
+After the merge command returns, refetch each layer you recorded. When its
+head SHA changed, run
+`git -c color.ui=never range-diff <old-base>..<old-head> <new-base>..<new-head>`
+and pass that output to `python3 scripts/stack_state.py range-diff`. Post
+`<!-- harness-rebase from: <old-head> head: <new-head> -->` only when it
+prints `"unchanged": true`. Do not post the marker when a row uses `!`, `<`,
+or `>`, or when a diff hunk is present. If the head SHA has not moved yet and
+mergeability is still `UNKNOWN`, refetch before the next decision. Do not
+`gh pr edit --base`.
 
 ### label
 
@@ -207,8 +231,9 @@ bottom. Adopted PRs are not reimplemented.
 - Do not merge past unfixed Critical/High findings.
 - Do not `gh pr merge` unless the script sets `via` to `pr`. Do not
   `gh pr edit --base`.
-- Do not `gh stack merge` the first slice while it is the only pull request
-  and another slice is still planned.
+- Do not `gh stack merge` a pull request that `remote_stack_prs` does not
+  list. That includes the first slice of a later batch after the previous
+  stack has fully merged. Open the next slice first when slices remain.
 - Do not hold a `progressive` prefix because a PR above it is still open.
 - Do not merge an `atomic` stack until the script returns `merge`.
 - Do not post `harness-rebase` unless `stack_state.py range-diff` reports

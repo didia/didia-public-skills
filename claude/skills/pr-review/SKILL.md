@@ -29,9 +29,9 @@ The reviewer's effort is floored at medium, so a low rating does not put the cri
 
 | Complexity | Review mode | Review spawn (model + effort) |
 |---|---|---|
-| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | Opus (`opus`) at `medium` |
-| medium | **Full** — every phase below | Opus (`opus`) at `medium` |
-| high | **Full** — every phase below | Opus (`opus`) at `high` |
+| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | Sonnet (`sonnet`) at `medium` |
+| medium | **Full** — every phase below | Opus (`opus`) at `low` |
+| high | **Full** — every phase below | Opus (`opus`) at `medium` |
 
 
 Say which Complexity and mode you are using before Phase 2.
@@ -158,9 +158,9 @@ subagent is fine):
 
 | Complexity | Model | Effort |
 |---|---|---|
-| low | `opus` | `medium` |
-| medium | `opus` | `medium` |
-| high | `opus` | `high` |
+| low | `sonnet` | `medium` |
+| medium | `opus` | `low` |
+| high | `opus` | `medium` |
 
 
 When spawning, pass that row's `model` and `effort`. On a focused (`low`) review, keep the work in the parent unless a single pass clearly benefits from isolation.

@@ -20,10 +20,11 @@ class GenerateTests(unittest.TestCase):
                     ctx["review_matrix"][level]["model"],
                 )
             if ctx["effort_key"]:
+                floor = "low" if provider in ("codex", "claude") else "medium"
                 for row in ctx["review_matrix"].values():
                     self.assertGreaterEqual(
                         generate.EFFORT_RANK[row["effort"]],
-                        generate.EFFORT_RANK["medium"],
+                        generate.EFFORT_RANK[floor],
                     )
 
     def test_cli_replaces_complexity_model_cells(self):
@@ -31,12 +32,13 @@ class GenerateTests(unittest.TestCase):
         ctx = generate.merge_provider_context(
             config,
             "codex",
-            {"development_model": "gpt-6.1-sol"},
+            {"development_model": "gpt-5.6-terra"},
         )
-        self.assertEqual(
-            ctx["development_matrix"]["low"]["model"],
-            "gpt-6.1-sol",
-        )
+        for level in generate.COMPLEXITY_LEVELS:
+            self.assertEqual(
+                ctx["development_matrix"][level]["model"],
+                "gpt-5.6-terra",
+            )
 
     def test_malformed_complexity_map_exits(self):
         config = {

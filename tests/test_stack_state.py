@@ -297,6 +297,7 @@ class DevelopTests(unittest.TestCase):
                     pr(3, 3, parent="2", base="b", head_name="c", head="ccc"),
                 ],
                 slices_remaining=1,
+                remote_stack_prs=[1, 2, 3],
             ),
         )
         self.assertEqual(action["action"], "merge")
@@ -322,9 +323,12 @@ class DevelopTests(unittest.TestCase):
                         head="ccc",
                         reviews=[review(1, "approved", "ccc")],
                     ),
-                ]
+                ],
+                remote_stack_prs=[1, 2, 3],
             ),
         )
+        self.assertEqual(action["action"], "merge")
+        self.assertEqual(action["via"], "stack")
         self.assertEqual(action["through"], 1)
         self.assertEqual(action["prs"], [1])
 
@@ -350,10 +354,16 @@ class DevelopTests(unittest.TestCase):
             ),
             pr(3, 3, parent="2", base="b", head_name="c", head="ccc", land="atomic"),
         ]
-        waiting = stack_state.decide("develop", payload(open_stack, slices_remaining=0))
+        waiting = stack_state.decide(
+            "develop",
+            payload(open_stack, slices_remaining=0, remote_stack_prs=[1, 2, 3]),
+        )
         self.assertNotEqual(waiting["action"], "merge")
         open_stack[2]["reviews"] = [review(1, "approved", "ccc")]
-        landed = stack_state.decide("develop", payload(open_stack, slices_remaining=0))
+        landed = stack_state.decide(
+            "develop",
+            payload(open_stack, slices_remaining=0, remote_stack_prs=[1, 2, 3]),
+        )
         self.assertEqual(landed["action"], "merge")
         self.assertEqual(landed["land"], "atomic")
         self.assertEqual(landed["through"], 3)
@@ -497,12 +507,98 @@ class DevelopTests(unittest.TestCase):
                         head="bbb",
                         reviews=[review(1, "approved", "bbb")],
                     ),
-                ]
+                ],
+                remote_stack_prs=[1, 2],
             ),
         )
         self.assertEqual(action["action"], "merge")
         self.assertEqual(action["via"], "stack")
         self.assertEqual(action["through"], 2)
+
+    def test_new_batch_after_completed_stack_is_not_a_remote_stack(self):
+        merged = [
+            pr(1, 1, state="MERGED", head_name="a"),
+            pr(2, 2, parent="1", state="MERGED", base="main", head_name="b"),
+        ]
+        fresh = pr(
+            3,
+            3,
+            parent="2",
+            base="main",
+            head_name="c",
+            head="ccc",
+            reviews=[review(1, "approved", "ccc")],
+        )
+        opening = stack_state.decide(
+            "develop",
+            payload(merged + [fresh], slices_remaining=1, remote_stack_prs=[]),
+        )
+        self.assertEqual(opening["action"], "continue")
+        self.assertEqual(opening["next_index"], 4)
+        self.assertEqual(opening["base_branch"], "c")
+        landing = stack_state.decide(
+            "develop",
+            payload(merged + [fresh], slices_remaining=0, remote_stack_prs=[]),
+        )
+        self.assertEqual(landing["action"], "merge")
+        self.assertEqual(landing["via"], "pr")
+        self.assertEqual(landing["through"], 3)
+        self.assertEqual(landing["heads"], {"3": "ccc"})
+
+    def test_unlisted_multi_pr_group_does_not_guess_a_merge_command(self):
+        action = stack_state.decide(
+            "develop",
+            payload(
+                [
+                    pr(1, 1, head_name="a", head="aaa", reviews=[review(1, "approved", "aaa")]),
+                    pr(
+                        2,
+                        2,
+                        parent="1",
+                        base="a",
+                        head_name="b",
+                        head="bbb",
+                        reviews=[review(1, "approved", "bbb")],
+                    ),
+                ],
+                remote_stack_prs=[],
+            ),
+        )
+        self.assertEqual(action["action"], "stop")
+
+    def test_automatic_rebase_without_marker_stops_a_capped_approval(self):
+        layers = [
+            pr(1, 1, state="MERGED", head_name="a"),
+            pr(
+                2,
+                2,
+                parent="1",
+                base="main",
+                head_name="b",
+                labels=["harness:awaiting-review"],
+            ),
+            pr(
+                3,
+                3,
+                parent="2",
+                base="b",
+                head_name="c",
+                head="new",
+                max_rounds=1,
+                reviews=[review(1, "approved", "old")],
+            ),
+        ]
+        uncovered = stack_state.decide(
+            "develop",
+            payload(layers, remote_stack_prs=[2, 3]),
+        )
+        self.assertEqual(uncovered["action"], "stop")
+        layers[2]["comments"] = [rebase("old", "new")]
+        covered = stack_state.decide(
+            "develop",
+            payload(layers, remote_stack_prs=[2, 3]),
+        )
+        self.assertEqual(covered["action"], "idle")
 
 
 class ReviewTests(unittest.TestCase):

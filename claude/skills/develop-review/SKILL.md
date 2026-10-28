@@ -77,18 +77,18 @@ spawn after that. Never lower the rating. The reviewer's effort is already floor
 
 | Complexity | Developer spawn | Reviewer spawn |
 |---|---|---|
-| low | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: low` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: medium` |
-| medium | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: medium` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: medium` |
-| high | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: high` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: high` |
+| low | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: haiku`, and `effort: medium` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: sonnet`, and `effort: medium` |
+| medium | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: medium` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: low` |
+| high | Invoke the Task tool with `subagent_type: develop-review-developer`, `model: sonnet`, and `effort: high` | Invoke the Task tool with `subagent_type: develop-review-reviewer`, `model: opus`, and `effort: medium` |
 
 Resolved defaults for this provider (config may override any cell):
 
 
 | Complexity | Developer model | Developer effort | Reviewer model | Reviewer effort |
 |---|---|---|---|---|
-| low | Sonnet (`sonnet`) | low | Opus (`opus`) | medium |
-| medium | Sonnet (`sonnet`) | medium | Opus (`opus`) | medium |
-| high | Sonnet (`sonnet`) | high | Opus (`opus`) | high |
+| low | Haiku (`haiku`) | medium | Sonnet (`sonnet`) | medium |
+| medium | Sonnet (`sonnet`) | medium | Opus (`opus`) | low |
+| high | Sonnet (`sonnet`) | high | Opus (`opus`) | medium |
 
 
 ## Step 0: Establish what's being built
