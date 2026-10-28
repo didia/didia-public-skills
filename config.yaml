@@ -32,14 +32,11 @@ providers:
     environment_name: "Claude Code or Cowork"
 
   codex:
-    # Sol plans and builds. Astra reviews, so Sol does not grade Sol.
-    # Low-complexity development steps down to Terra; review stays on Astra.
+    # Plan on Sol at high effort. Build on gpt-6.1-sol at low / medium / high
+    # model_reasoning_effort from Complexity. Astra reviews so Sol does not grade Sol.
     planning_model: gpt-6.1-sol
     development_model: gpt-6.1-sol
     review_model: gpt-6-astra
-    development_by_complexity:
-      low:
-        model: gpt-5.6-terra
     skills_dir: "~/.codex/skills"
     agents_dir: "~/.codex/agents"
     project_agents_dir: ".codex/agents"
