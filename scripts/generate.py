@@ -279,9 +279,9 @@ def merge_provider_context(
         _apply_model(development_matrix, str(cli_overrides["development_model"]))
     if cli_overrides.get("review_model"):
         _apply_model(review_matrix, str(cli_overrides["review_model"]))
+    review_effort_floor = str(merged.get("review_effort_floor") or "medium")
     if effort_key:
-        floor = str(merged.get("review_effort_floor") or "medium")
-        _apply_effort_floor(review_matrix, floor)
+        _apply_effort_floor(review_matrix, review_effort_floor)
 
     invoke_template = str(merged["subagent_invoke"])
 
@@ -356,6 +356,7 @@ def merge_provider_context(
         "development_model": development_model,
         "review_model": review_model,
         "planning_effort": planning_effort,
+        "review_effort_floor": review_effort_floor,
         "effort_key": effort_key,
         "trunk": str(merged.get("trunk") or "dev"),
         "agent_suffix": ".toml" if provider == "codex" else ".md",
