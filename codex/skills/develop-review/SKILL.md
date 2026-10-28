@@ -77,7 +77,7 @@ spawn after that. Never lower the rating. The reviewer's effort is already floor
 
 | Complexity | Developer spawn | Reviewer spawn |
 |---|---|---|
-| low | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-5.6-terra` and `model_reasoning_effort: low` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: low` |
+| low | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-5.6-terra` and `model_reasoning_effort: medium` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: medium` |
 | medium | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: medium` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: low` |
 | high | Spawn a subagent named `develop-review-developer` in a fresh context with `model: gpt-6.1-sol` and `model_reasoning_effort: high` | Spawn a subagent named `develop-review-reviewer` in a fresh context with `model: gpt-6-astra` and `model_reasoning_effort: medium` |
 
@@ -86,7 +86,7 @@ Resolved defaults for this provider (config may override any cell):
 
 | Complexity | Developer model | Developer effort | Reviewer model | Reviewer effort |
 |---|---|---|---|---|
-| low | GPT 5.6 Terra (`gpt-5.6-terra`) | low | GPT 6 Astra (`gpt-6-astra`) | low |
+| low | GPT 5.6 Terra (`gpt-5.6-terra`) | medium | GPT 6.1 Sol (`gpt-6.1-sol`) | medium |
 | medium | GPT 6.1 Sol (`gpt-6.1-sol`) | medium | GPT 6 Astra (`gpt-6-astra`) | low |
 | high | GPT 6.1 Sol (`gpt-6.1-sol`) | high | GPT 6 Astra (`gpt-6-astra`) | medium |
 

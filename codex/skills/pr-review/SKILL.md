@@ -29,7 +29,7 @@ The reviewer's effort is floored at medium, so a low rating does not put the cri
 
 | Complexity | Review mode | Review spawn (model + effort) |
 |---|---|---|
-| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | GPT 6 Astra (`gpt-6-astra`) at `low` |
+| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | GPT 6.1 Sol (`gpt-6.1-sol`) at `medium` |
 | medium | **Full** — every phase below | GPT 6 Astra (`gpt-6-astra`) at `low` |
 | high | **Full** — every phase below | GPT 6 Astra (`gpt-6-astra`) at `medium` |
 
@@ -158,7 +158,7 @@ subagent is fine):
 
 | Complexity | Model | Effort |
 |---|---|---|
-| low | `gpt-6-astra` | `low` |
+| low | `gpt-6.1-sol` | `medium` |
 | medium | `gpt-6-astra` | `low` |
 | high | `gpt-6-astra` | `medium` |
 

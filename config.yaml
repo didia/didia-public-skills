@@ -41,6 +41,7 @@ providers:
     development_by_complexity:
       low:
         model: gpt-5.6-terra
+        effort: medium
       medium:
         model: gpt-6.1-sol
         effort: medium
@@ -49,7 +50,8 @@ providers:
         effort: high
     review_by_complexity:
       low:
-        effort: low
+        model: gpt-6.1-sol
+        effort: medium
       medium:
         effort: low
       high:

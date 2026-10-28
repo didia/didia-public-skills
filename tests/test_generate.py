@@ -32,12 +32,13 @@ class GenerateTests(unittest.TestCase):
         ctx = generate.merge_provider_context(
             config,
             "codex",
-            {"development_model": "gpt-6.1-sol"},
+            {"development_model": "gpt-5.6-terra"},
         )
-        self.assertEqual(
-            ctx["development_matrix"]["low"]["model"],
-            "gpt-6.1-sol",
-        )
+        for level in generate.COMPLEXITY_LEVELS:
+            self.assertEqual(
+                ctx["development_matrix"][level]["model"],
+                "gpt-5.6-terra",
+            )
 
     def test_malformed_complexity_map_exits(self):
         config = {
