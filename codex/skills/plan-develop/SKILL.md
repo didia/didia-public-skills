@@ -25,7 +25,7 @@ See `references/complexity-rubric.md`.
 
 A single model planning, writing, and reviewing its own code approves its own blind spots
 — it's hard to spot a flaw in an approach you just committed to. Both halves of this
-pipeline therefore split generative work (GPT 6.1 Sol / GPT 6.1 Sol) from adversarial work (GPT 6 Astra), with
+pipeline therefore split generative work (GPT 6.1 Sol / GPT 6.1 Terra) from adversarial work (GPT 6 Astra), with
 the critic getting fresh context and the real artifact rather than the author's account
 of it.
 
