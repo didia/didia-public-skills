@@ -169,6 +169,8 @@ def _require_distinct_critics(
     validator_model: str,
     development_matrix: dict[str, dict[str, str]],
     review_matrix: dict[str, dict[str, str]],
+    *,
+    allow_same_develop_review_model: bool = False,
 ) -> None:
     # Plan validation uses the base review model, not the per-complexity matrix.
     if planning_model == validator_model:
@@ -177,6 +179,8 @@ def _require_distinct_critics(
             "validator model. The plan critic has to be a different model; use effort to "
             "control cost."
         )
+    if allow_same_develop_review_model:
+        return
     for level in COMPLEXITY_LEVELS:
         author = development_matrix[level]["model"]
         critic = review_matrix[level]["model"]
@@ -298,12 +302,16 @@ def merge_provider_context(
         planning_model = str(cli_overrides["planning_model"])
     if cli_overrides.get("review_model"):
         review_model = str(cli_overrides["review_model"])
+    allow_same_develop_review = bool(
+        merged.pop("allow_same_develop_review_model", False)
+    )
     _require_distinct_critics(
         provider,
         planning_model,
         review_model,
         development_matrix,
         review_matrix,
+        allow_same_develop_review_model=allow_same_develop_review,
     )
     development_model = str(
         cli_overrides.get("development_model") or merged["development_model"]

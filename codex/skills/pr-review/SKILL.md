@@ -29,9 +29,9 @@ The reviewer's effort is floored at medium, so a low rating does not put the cri
 
 | Complexity | Review mode | Review spawn (model + effort) |
 |---|---|---|
-| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | GPT 6 Astra (`gpt-6-astra`) at `medium` |
-| medium | **Full** — every phase below | GPT 6 Astra (`gpt-6-astra`) at `medium` |
-| high | **Full** — every phase below | GPT 6 Astra (`gpt-6-astra`) at `high` |
+| low | **Focused** — phases 1, 3, 6, 7; skip the coverage matrix | GPT 6.1 Sol (`gpt-6.1-sol`) at `low` |
+| medium | **Full** — every phase below | GPT 6.1 Sol (`gpt-6.1-sol`) at `medium` |
+| high | **Full** — every phase below | GPT 6.1 Sol (`gpt-6.1-sol`) at `high` |
 
 
 Say which Complexity and mode you are using before Phase 2.
@@ -158,9 +158,9 @@ subagent is fine):
 
 | Complexity | Model | Effort |
 |---|---|---|
-| low | `gpt-6-astra` | `medium` |
-| medium | `gpt-6-astra` | `medium` |
-| high | `gpt-6-astra` | `high` |
+| low | `gpt-6.1-sol` | `low` |
+| medium | `gpt-6.1-sol` | `medium` |
+| high | `gpt-6.1-sol` | `high` |
 
 
 When spawning, pass that row's `model` and `model_reasoning_effort`. On a focused (`low`) review, keep the work in the parent unless a single pass clearly benefits from isolation.

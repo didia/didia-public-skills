@@ -15,15 +15,22 @@ class GenerateTests(unittest.TestCase):
             ctx = generate.merge_provider_context(config, provider, {})
             self.assertNotEqual(ctx["planning_model"], ctx["review_model"])
             for level in generate.COMPLEXITY_LEVELS:
-                self.assertNotEqual(
-                    ctx["development_matrix"][level]["model"],
-                    ctx["review_matrix"][level]["model"],
-                )
+                dev = ctx["development_matrix"][level]["model"]
+                rev = ctx["review_matrix"][level]["model"]
+                if provider == "codex":
+                    if level == "low":
+                        self.assertNotEqual(dev, rev)
+                    else:
+                        self.assertEqual(dev, rev)
+                        self.assertEqual(rev, "gpt-6.1-sol")
+                else:
+                    self.assertNotEqual(dev, rev)
             if ctx["effort_key"]:
+                floor = "low" if provider == "codex" else "medium"
                 for row in ctx["review_matrix"].values():
                     self.assertGreaterEqual(
                         generate.EFFORT_RANK[row["effort"]],
-                        generate.EFFORT_RANK["medium"],
+                        generate.EFFORT_RANK[floor],
                     )
 
     def test_cli_replaces_complexity_model_cells(self):
